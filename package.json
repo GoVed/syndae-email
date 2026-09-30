@@ -1,0 +1,36 @@
+{
+  "name": "@styx-tools/email",
+  "version": "1.0.0",
+  "description": "Universal IMAP/SMTP Email MCP Micro-Daemon for Styx Agent OS",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "styx-email": "./bin/styx-email"
+  },
+  "scripts": {
+    "start": "node src/index.js daemon",
+    "test": "node tests/email.test.js"
+  },
+  "keywords": [
+    "styx",
+    "email",
+    "imap",
+    "smtp",
+    "gmail",
+    "outlook",
+    "icloud",
+    "mcp",
+    "agent-os"
+  ],
+  "author": "Styx Community",
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^13.1.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "imapflow": "^2.1.2",
+    "mailparser": "^3.9.32",
+    "nodemailer": "^6.10.0",
+    "pino": "^9.6.0"
+  }
+}

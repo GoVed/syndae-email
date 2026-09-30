@@ -1,0 +1,43 @@
+{
+  "name": "email",
+  "display_name": "Universal Email (IMAP & SMTP)",
+  "version": "1.0.0",
+  "description": "Universal IMAP & SMTP Email MCP Micro-Daemon with Real-Time IMAP IDLE Push for Styx Agent OS",
+  "container_name": "styx-email-connector",
+  "port": 8771,
+  "protocol": "email",
+  "instructions_file": "instructions.md",
+  "has_docker": true,
+  "tools": [
+    {
+      "name": "list_emails",
+      "description": "Fetch a list of recent emails from mailbox with envelope headers, read status, and attachment flags",
+      "risk_level": "LOW",
+      "policy": "AUTONOMOUS"
+    },
+    {
+      "name": "read_email",
+      "description": "Retrieve full email details including complete text body, sender/recipient metadata, and attachment summaries by message UID",
+      "risk_level": "LOW",
+      "policy": "AUTONOMOUS"
+    },
+    {
+      "name": "search_emails",
+      "description": "Search mailbox for emails matching a keyword across sender, subject, or message body",
+      "risk_level": "LOW",
+      "policy": "AUTONOMOUS"
+    },
+    {
+      "name": "send_email",
+      "description": "Draft and dispatch an outbound email via SMTP. Sensitive action: generates a Human-in-the-Loop approval ticket in Styx",
+      "risk_level": "HIGH",
+      "policy": "REQUIRE_APPROVAL"
+    },
+    {
+      "name": "archive_or_mark_email",
+      "description": "Manage email status: mark read/unread, flag/star, move to folder (e.g. Archive or Trash), or delete",
+      "risk_level": "MEDIUM",
+      "policy": "REQUIRE_APPROVAL"
+    }
+  ]
+}

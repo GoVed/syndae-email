@@ -1,0 +1,378 @@
+import { ImapFlow } from 'imapflow';
+import nodemailer from 'nodemailer';
+import { simpleParser } from 'mailparser';
+import logger from '../utils/logger.js';
+import config from '../config.js';
+
+export class EmailClient {
+  constructor(customConfig = {}) {
+    this.cfg = {
+      provider: customConfig.provider || config.provider,
+      user: customConfig.user || config.user,
+      pass: customConfig.pass || config.pass,
+      imapHost: customConfig.imapHost || config.imapHost,
+      imapPort: customConfig.imapPort || config.imapPort,
+      imapSecure: customConfig.imapSecure !== undefined ? customConfig.imapSecure : config.imapSecure,
+      smtpHost: customConfig.smtpHost || config.smtpHost,
+      smtpPort: customConfig.smtpPort || config.smtpPort,
+      smtpSecure: customConfig.smtpSecure !== undefined ? customConfig.smtpSecure : config.smtpSecure,
+      oauth2ClientId: customConfig.oauth2ClientId || config.oauth2ClientId,
+      oauth2ClientSecret: customConfig.oauth2ClientSecret || config.oauth2ClientSecret,
+      oauth2RefreshToken: customConfig.oauth2RefreshToken || config.oauth2RefreshToken,
+      enableIdle: customConfig.enableIdle !== undefined ? customConfig.enableIdle : config.enableIdle,
+    };
+
+    this.imap = null;
+    this.smtp = null;
+    this.connected = false;
+    this.idleActive = false;
+    this.statusListeners = [];
+  }
+
+  isConfigured() {
+    return Boolean(
+      (this.cfg.user && this.cfg.pass) ||
+      (this.cfg.user && this.cfg.oauth2RefreshToken)
+    );
+  }
+
+  getMaskedUser() {
+    return config.maskEmail(this.cfg.user);
+  }
+
+  getImapAuth() {
+    if (this.cfg.oauth2RefreshToken && this.cfg.oauth2ClientId) {
+      return {
+        user: this.cfg.user,
+        accessToken: null, // Will use refresh token
+        refreshToken: this.cfg.oauth2RefreshToken,
+        clientId: this.cfg.oauth2ClientId,
+        clientSecret: this.cfg.oauth2ClientSecret,
+      };
+    }
+    return {
+      user: this.cfg.user,
+      pass: this.cfg.pass,
+    };
+  }
+
+  async connect() {
+    if (!this.isConfigured()) {
+      logger.warn('Email credentials not configured. Running in stand-by mode.');
+      return false;
+    }
+
+    try {
+      // 1. Initialize IMAP Client
+      this.imap = new ImapFlow({
+        host: this.cfg.imapHost,
+        port: this.cfg.imapPort,
+        secure: this.cfg.imapSecure,
+        auth: this.getImapAuth(),
+        logger: false,
+        clientInfo: {
+          name: 'Styx-Agent-OS',
+          version: '1.0.0',
+        },
+      });
+
+      this.imap.on('error', err => {
+        logger.error({ err: err.message }, 'IMAP connection error');
+      });
+
+      this.imap.on('close', () => {
+        this.connected = false;
+        this.idleActive = false;
+        logger.info('IMAP connection closed');
+      });
+
+      await this.imap.connect();
+      this.connected = true;
+      logger.info({ host: this.cfg.imapHost, user: this.getMaskedUser() }, 'Connected to IMAP server');
+
+      // 2. Initialize SMTP Transporter
+      const smtpAuth = this.cfg.oauth2RefreshToken
+        ? {
+            type: 'OAuth2',
+            user: this.cfg.user,
+            clientId: this.cfg.oauth2ClientId,
+            clientSecret: this.cfg.oauth2ClientSecret,
+            refreshToken: this.cfg.oauth2RefreshToken,
+          }
+        : {
+            user: this.cfg.user,
+            pass: this.cfg.pass,
+          };
+
+      this.smtp = nodemailer.createTransport({
+        host: this.cfg.smtpHost,
+        port: this.cfg.smtpPort,
+        secure: this.cfg.smtpSecure,
+        auth: smtpAuth,
+      });
+
+      return true;
+    } catch (err) {
+      this.connected = false;
+      logger.error({ err: err.message }, 'Failed to connect to email server');
+      throw err;
+    }
+  }
+
+  async disconnect() {
+    try {
+      if (this.imap) {
+        await this.imap.logout();
+      }
+    } catch (e) {
+      // Ignore logout errors
+    } finally {
+      this.connected = false;
+      this.idleActive = false;
+    }
+  }
+
+  async ensureConnected() {
+    if (!this.connected || !this.imap || !this.imap.usable) {
+      await this.connect();
+    }
+  }
+
+  async listEmails({ folder = 'INBOX', limit = 20, unreadOnly = false, since = null } = {}) {
+    await this.ensureConnected();
+
+    const lock = await this.imap.getMailboxLock(folder);
+    try {
+      const searchCriteria = {};
+      if (unreadOnly) searchCriteria.seen = false;
+      if (since) searchCriteria.since = new Date(since);
+
+      const messages = [];
+      const query = Object.keys(searchCriteria).length > 0 ? searchCriteria : { all: true };
+
+      // Query latest message sequence
+      const searchResults = await this.imap.search(query, { uid: true });
+      if (!searchResults || searchResults.length === 0) {
+        return [];
+      }
+
+      // Slice the most recent N messages (highest UIDs)
+      const targetUids = searchResults.slice(-limit).reverse();
+      if (targetUids.length === 0) return [];
+
+      const fetchGenerator = this.imap.fetch(targetUids, {
+        envelope: true,
+        flags: true,
+        internalDate: true,
+        bodyStructure: true,
+      }, { uid: true });
+
+      for await (const msg of fetchGenerator) {
+        const fromAddr = msg.envelope?.from?.[0];
+        const toAddrs = (msg.envelope?.to || []).map(t => t.address || `${t.mailbox}@${t.host}`);
+        const hasAttachments = Boolean(
+          msg.bodyStructure?.childNodes?.some(node => node.disposition === 'attachment')
+        );
+
+        messages.push({
+          uid: msg.uid,
+          messageId: msg.envelope?.messageId || `uid-${msg.uid}`,
+          from: fromAddr ? { name: fromAddr.name, address: fromAddr.address || `${fromAddr.mailbox}@${fromAddr.host}` } : null,
+          to: toAddrs,
+          subject: msg.envelope?.subject || '(No Subject)',
+          date: msg.envelope?.date ? msg.envelope.date.toISOString() : msg.internalDate?.toISOString(),
+          unread: !msg.flags.has('\\Seen'),
+          flagged: msg.flags.has('\\Flagged'),
+          hasAttachments,
+        });
+      }
+
+      return messages;
+    } finally {
+      lock.release();
+    }
+  }
+
+  async readEmail({ uid, folder = 'INBOX', markAsRead = true } = {}) {
+    await this.ensureConnected();
+
+    const lock = await this.imap.getMailboxLock(folder);
+    try {
+      const { content } = await this.imap.download(uid, undefined, { uid: true });
+      const parsed = await simpleParser(content);
+
+      if (markAsRead) {
+        try {
+          await this.imap.messageFlagsAdd(uid, ['\\Seen'], { uid: true });
+        } catch (e) {
+          logger.warn({ err: e.message, uid }, 'Failed to set Seen flag');
+        }
+      }
+
+      return {
+        uid,
+        messageId: parsed.messageId || `uid-${uid}`,
+        subject: parsed.subject || '(No Subject)',
+        from: parsed.from?.value?.[0] ? { name: parsed.from.value[0].name, address: parsed.from.value[0].address } : null,
+        to: (parsed.to?.value || []).map(t => ({ name: t.name, address: t.address })),
+        cc: (parsed.cc?.value || []).map(t => ({ name: t.name, address: t.address })),
+        date: parsed.date ? parsed.date.toISOString() : new Date().toISOString(),
+        text: parsed.text || '',
+        html: parsed.html || null,
+        attachments: (parsed.attachments || []).map(att => ({
+          filename: att.filename,
+          contentType: att.contentType,
+          size: att.size,
+        })),
+        inReplyTo: parsed.inReplyTo || null,
+        references: parsed.references || null,
+      };
+    } finally {
+      lock.release();
+    }
+  }
+
+  async searchEmails({ query, folder = 'INBOX', limit = 20 } = {}) {
+    await this.ensureConnected();
+
+    const lock = await this.imap.getMailboxLock(folder);
+    try {
+      // Match query across subject or body or from
+      const searchCriteria = {
+        or: [
+          { subject: query },
+          { body: query },
+          { from: query },
+        ]
+      };
+
+      const searchResults = await this.imap.search(searchCriteria, { uid: true });
+      if (!searchResults || searchResults.length === 0) {
+        return [];
+      }
+
+      const targetUids = searchResults.slice(-limit).reverse();
+      const messages = [];
+
+      const fetchGenerator = this.imap.fetch(targetUids, {
+        envelope: true,
+        flags: true,
+        internalDate: true,
+      }, { uid: true });
+
+      for await (const msg of fetchGenerator) {
+        const fromAddr = msg.envelope?.from?.[0];
+        messages.push({
+          uid: msg.uid,
+          messageId: msg.envelope?.messageId || `uid-${msg.uid}`,
+          from: fromAddr ? { name: fromAddr.name, address: fromAddr.address || `${fromAddr.mailbox}@${fromAddr.host}` } : null,
+          subject: msg.envelope?.subject || '(No Subject)',
+          date: msg.envelope?.date ? msg.envelope.date.toISOString() : msg.internalDate?.toISOString(),
+          unread: !msg.flags.has('\\Seen'),
+        });
+      }
+
+      return messages;
+    } finally {
+      lock.release();
+    }
+  }
+
+  async sendEmail({ to, subject, text, html, cc, bcc, replyTo, inReplyTo, references } = {}) {
+    if (!this.smtp) {
+      await this.ensureConnected();
+    }
+
+    if (!this.smtp) {
+      throw new Error('SMTP transporter is not initialized');
+    }
+
+    const mailOptions = {
+      from: `"${this.cfg.user.split('@')[0]}" <${this.cfg.user}>`,
+      to,
+      subject,
+      text,
+      html: html || undefined,
+      cc: cc || undefined,
+      bcc: bcc || undefined,
+      replyTo: replyTo || undefined,
+      inReplyTo: inReplyTo || undefined,
+      references: references || undefined,
+    };
+
+    const info = await this.smtp.sendMail(mailOptions);
+    logger.info({ messageId: info.messageId, to }, 'Email dispatched via SMTP');
+
+    return {
+      success: true,
+      messageId: info.messageId,
+      accepted: info.accepted,
+      response: info.response,
+    };
+  }
+
+  async archiveOrMarkEmail({ uid, action, folder = 'INBOX', targetFolder } = {}) {
+    await this.ensureConnected();
+
+    const lock = await this.imap.getMailboxLock(folder);
+    try {
+      switch (action) {
+        case 'read':
+          await this.imap.messageFlagsAdd(uid, ['\\Seen'], { uid: true });
+          return { success: true, action: 'marked_as_read', uid };
+        case 'unread':
+          await this.imap.messageFlagsRemove(uid, ['\\Seen'], { uid: true });
+          return { success: true, action: 'marked_as_unread', uid };
+        case 'flag':
+          await this.imap.messageFlagsAdd(uid, ['\\Flagged'], { uid: true });
+          return { success: true, action: 'flagged', uid };
+        case 'unflag':
+          await this.imap.messageFlagsRemove(uid, ['\\Flagged'], { uid: true });
+          return { success: true, action: 'unflagged', uid };
+        case 'move':
+          if (!targetFolder) throw new Error('targetFolder parameter required for move action');
+          await this.imap.messageMove(uid, targetFolder, { uid: true });
+          return { success: true, action: `moved_to_${targetFolder}`, uid };
+        case 'delete':
+          await this.imap.messageDelete(uid, { uid: true });
+          return { success: true, action: 'deleted', uid };
+        default:
+          throw new Error(`Unknown action: ${action}. Expected read, unread, flag, unflag, move, or delete.`);
+      }
+    } finally {
+      lock.release();
+    }
+  }
+
+  async startIdleListener(onNewEmail) {
+    if (!this.cfg.enableIdle || !this.isConfigured()) return;
+    await this.ensureConnected();
+
+    try {
+      const lock = await this.imap.getMailboxLock('INBOX');
+      this.idleActive = true;
+      logger.info('IMAP IDLE push listener active on INBOX');
+
+      this.imap.on('exists', async data => {
+        try {
+          logger.info({ newCount: data.count, prevCount: data.prevCount }, 'New email notification received via IMAP IDLE');
+          // Fetch the latest incoming message
+          const latest = await this.listEmails({ folder: 'INBOX', limit: 1 });
+          if (latest.length > 0) {
+            const emailDetails = await this.readEmail({ uid: latest[0].uid, folder: 'INBOX', markAsRead: false });
+            if (typeof onNewEmail === 'function') {
+              onNewEmail(emailDetails);
+            }
+          }
+        } catch (e) {
+          logger.error({ err: e.message }, 'Error handling IMAP IDLE exists event');
+        }
+      });
+    } catch (err) {
+      this.idleActive = false;
+      logger.warn({ err: err.message }, 'Failed to start IMAP IDLE listener');
+    }
+  }
+}
+
+export default EmailClient;

@@ -1,0 +1,35 @@
+services:
+  styx-email:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: styx-email-connector
+    restart: unless-stopped
+    ports:
+      - "8771:8771"
+    environment:
+      - HTTP_PORT=8771
+      - HTTP_HOST=0.0.0.0
+      - EMAIL_PROVIDER=${EMAIL_PROVIDER:-gmail}
+      - EMAIL_USER=${EMAIL_USER:-}
+      - EMAIL_PASS=${EMAIL_PASS:-}
+      - IMAP_HOST=${IMAP_HOST:-}
+      - IMAP_PORT=${IMAP_PORT:-}
+      - IMAP_SECURE=${IMAP_SECURE:-}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-}
+      - SMTP_SECURE=${SMTP_SECURE:-}
+      - ENABLE_IDLE=${ENABLE_IDLE:-true}
+      - STYX_API_URL=http://host.docker.internal:3000
+      - STYX_ACCESS_KEY=${STYX_ACCESS_KEY:-styx-local-dev-key}
+      - LOG_LEVEL=info
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - styx_default
+
+networks:
+  default:
+  styx_default:
+    external: true
