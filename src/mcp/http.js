@@ -241,42 +241,83 @@ export function createHttpApp(options = {}) {
 }
 
 function renderOAuthConfigHtml({ provider, accountId, redirectUri }) {
+  const isGmail = provider === 'gmail';
+  const placeholder = isGmail ? '1234567890-abc123xyz.apps.googleusercontent.com' : 'Your OAuth Application (Client) ID';
+  const consoleLink = isGmail
+    ? 'https://console.cloud.google.com/apis/credentials'
+    : 'https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade';
+
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <title>Connect ${provider.toUpperCase()} - Styx Agent OS</title>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
-    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 2rem; max-width: 520px; width: 90%; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 1rem; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 2rem; max-width: 560px; width: 100%; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }
     h2 { margin-top: 0; color: #38bdf8; font-size: 1.4rem; }
     p { color: #94a3b8; font-size: 0.95rem; line-height: 1.5; }
     label { display: block; margin-top: 1rem; font-weight: 500; font-size: 0.85rem; color: #cbd5e1; }
     input { width: 100%; box-sizing: border-box; padding: 0.65rem; margin-top: 0.3rem; background: #0f172a; border: 1px solid #475569; border-radius: 6px; color: #fff; font-size: 0.9rem; }
     .btn { display: inline-block; margin-top: 1.5rem; width: 100%; box-sizing: border-box; background: #0284c7; color: #fff; border: none; padding: 0.75rem; border-radius: 6px; font-weight: 600; cursor: pointer; text-align: center; text-decoration: none; }
     .btn:hover { background: #0369a1; }
-    .code-box { background: #0f172a; padding: 0.5rem; border-radius: 4px; font-family: monospace; font-size: 0.8rem; word-break: break-all; color: #38bdf8; }
+    .code-box { background: #0f172a; padding: 0.5rem; border-radius: 4px; font-family: monospace; font-size: 0.82rem; word-break: break-all; color: #38bdf8; border: 1px solid #334155; }
+    .alert-box { background: #1e1b4b; border: 1px solid #4338ca; border-radius: 8px; padding: 0.85rem; margin-top: 1rem; font-size: 0.85rem; color: #c7d2fe; line-height: 1.4; }
+    .alert-warn { background: #451a03; border-color: #b45309; color: #fde68a; }
+    .err-msg { display: none; color: #f87171; font-size: 0.85rem; margin-top: 0.5rem; font-weight: 500; }
   </style>
 </head>
 <body>
   <div class="card">
-    <h2>Connect ${provider === 'gmail' ? 'Google Gmail' : 'Microsoft Outlook'} (OAuth 2.0)</h2>
-    <p>To authorize Styx to read and send emails using Modern Auth without storing static passwords, enter your OAuth App credentials below:</p>
+    <h2>Connect ${isGmail ? 'Google Gmail' : 'Microsoft Outlook'} (OAuth 2.0)</h2>
+    <p>To connect Styx using Modern Auth without storing static passwords, enter your OAuth App credentials from <a href="${consoleLink}" target="_blank" style="color:#38bdf8; text-decoration:underline;">${isGmail ? 'Google Cloud Console' : 'Azure Portal'} &nearr;</a></p>
+
     <div style="margin-bottom: 1rem;">
-      <span style="font-size:0.8rem; color:#94a3b8;">Authorized Redirect URI:</span>
+      <span style="font-size:0.8rem; color:#94a3b8; font-weight: 500;">1. Authorized Redirect URI (add to your OAuth Client in console):</span>
       <div class="code-box">${redirectUri}</div>
     </div>
-    <form method="GET" action="/auth/connect">
+
+    ${isGmail ? `
+    <div class="alert-box alert-warn">
+      <strong>⚠️ Important for Google OAuth:</strong><br>
+      • Copy the <strong>OAuth 2.0 Client ID</strong> under "OAuth 2.0 Client IDs" (ends with <code>.apps.googleusercontent.com</code>).<br>
+      • Do <strong>NOT</strong> paste your Project ID, Project Name, or API Key (<code>AIza...</code>).
+    </div>
+    ` : ''}
+
+    <form method="GET" action="/auth/connect" id="oauthForm">
       <input type="hidden" name="provider" value="${provider}">
       <label>Account ID / Mailbox Label (e.g. personal, work, school)</label>
       <input type="text" name="account" value="${accountId}" required>
-      <label>Client ID</label>
-      <input type="text" name="client_id" placeholder="Your OAuth Client ID" required>
-      <label>Client Secret (Optional if using PKCE public client)</label>
+
+      <label>OAuth Client ID</label>
+      <input type="text" id="clientIdInput" name="client_id" placeholder="${placeholder}" required>
+      <div id="clientIdError" class="err-msg"></div>
+
+      <label>Client Secret (Optional for PKCE public clients)</label>
       <input type="password" name="client_secret" placeholder="Your OAuth Client Secret">
+
       <button type="submit" class="btn">Continue to Provider Login &rarr;</button>
     </form>
   </div>
+
+  <script>
+    const form = document.getElementById('oauthForm');
+    const input = document.getElementById('clientIdInput');
+    const err = document.getElementById('clientIdError');
+    const provider = "${provider}";
+
+    form.addEventListener('submit', function(e) {
+      const val = input.value.trim();
+      if (provider === 'gmail' && !val.endsWith('.apps.googleusercontent.com')) {
+        e.preventDefault();
+        err.style.display = 'block';
+        err.innerHTML = '❌ Invalid Google Client ID. It must end with <code>.apps.googleusercontent.com</code>.<br>Please copy the Client ID from <em>Google Cloud Console &rarr; APIs &amp; Services &rarr; Credentials &rarr; OAuth 2.0 Client IDs</em>, not the Project ID or API Key.';
+      } else {
+        err.style.display = 'none';
+      }
+    });
+  </script>
 </body>
 </html>`;
 }
