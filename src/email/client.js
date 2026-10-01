@@ -65,9 +65,13 @@ export class EmailClient {
         clientSecret: this.cfg.oauth2ClientSecret,
       };
     }
+    let pass = this.cfg.pass;
+    if (this.cfg.provider === 'gmail' && pass && pass.includes(' ') && pass.replace(/\s+/g, '').length === 16) {
+      pass = pass.replace(/\s+/g, '');
+    }
     return {
       user: this.cfg.user,
-      pass: this.cfg.pass,
+      pass,
     };
   }
 
@@ -106,6 +110,11 @@ export class EmailClient {
       logger.info({ host: this.cfg.imapHost, user: this.getMaskedUser() }, 'Connected to IMAP server');
 
       // 2. Initialize SMTP Transporter
+      let smtpPass = this.cfg.pass;
+      if (this.cfg.provider === 'gmail' && smtpPass && smtpPass.includes(' ') && smtpPass.replace(/\s+/g, '').length === 16) {
+        smtpPass = smtpPass.replace(/\s+/g, '');
+      }
+
       const smtpAuth = this.cfg.oauth2RefreshToken
         ? {
             type: 'OAuth2',
@@ -116,7 +125,7 @@ export class EmailClient {
           }
         : {
             user: this.cfg.user,
-            pass: this.cfg.pass,
+            pass: smtpPass,
           };
 
       this.smtp = nodemailer.createTransport({
@@ -129,8 +138,16 @@ export class EmailClient {
       return true;
     } catch (err) {
       this.connected = false;
-      logger.error({ err: err.message }, 'Failed to connect to email server');
-      throw err;
+      let msg = err.message || 'Unknown connection error';
+      if (err.authenticationFailed || err.response?.includes('AUTHENTICATIONFAILED')) {
+        msg = 'Invalid credentials. Please verify your email address and 16-character Google App Password.';
+      } else if (msg.includes('Unexpected close') || err.code === 'ECONNRESET') {
+        msg = 'Connection closed by server. If using Gmail, please make sure IMAP is enabled in your Gmail settings (Settings → Forwarding and POP/IMAP → Enable IMAP).';
+      }
+      logger.error({ err: err.message, diagnosed: msg }, 'Failed to connect to email server');
+      const enhancedError = new Error(msg);
+      enhancedError.original = err;
+      throw enhancedError;
     }
   }
 

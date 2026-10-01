@@ -319,10 +319,9 @@ export function renderMailboxDashboardHtml(accounts = [], stats = {}) {
       <!-- Tab 1: Gmail App Password -->
       <div id="tab-gmail" class="tab-content active">
         <div class="tip-box">
-          <strong>⚡ Direct 10-Second Setup (No Google Cloud project required!):</strong><br>
-          1. Go to <a href="https://myaccount.google.com/apppasswords" target="_blank">Google App Passwords ↗</a> (requires 2FA).<br>
-          2. Type <code>Styx</code> as the app name and click <strong>Create</strong>.<br>
-          3. Copy the 16-character code (e.g. <code>abcd efgh ijkl mnop</code>) and paste it below.
+          <strong>⚡ 2 Quick Steps for Gmail (Takes ~15 seconds):</strong><br>
+          <strong>Step 1:</strong> In Gmail, verify IMAP is enabled: <a href="https://mail.google.com/mail/u/0/#settings/fwdandpop" target="_blank">Gmail Settings &rarr; Forwarding and POP/IMAP ↗</a> &bull; select <strong>Enable IMAP</strong> &bull; Save Changes.<br>
+          <strong>Step 2:</strong> Open <a href="https://myaccount.google.com/apppasswords" target="_blank">Google App Passwords ↗</a>, create one named <code>Styx</code>, and paste the 16 letters below.
         </div>
         <form onsubmit="handleDirectSubmit(event, 'gmail')">
           <label>Mailbox Identifier / Alias</label>
@@ -330,7 +329,7 @@ export function renderMailboxDashboardHtml(accounts = [], stats = {}) {
           <label>Gmail Address</label>
           <input type="email" name="user" placeholder="your_email@gmail.com" required>
           <label>Google 16-Character App Password</label>
-          <input type="password" name="pass" placeholder="xxxx xxxx xxxx xxxx" required>
+          <input type="password" name="pass" placeholder="16 letters (e.g. abcd efgh ijkl mnop)" required>
           <button type="submit" class="btn-primary" id="btn-submit-gmail">
             <span class="spinner" id="spinner-gmail"></span>
             <span>Connect Gmail Mailbox</span>

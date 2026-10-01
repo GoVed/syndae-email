@@ -132,11 +132,16 @@ export function createHttpApp(options = {}) {
 
       logger.info({ provider, user: config.maskEmail(user) }, 'Attempting direct mailbox connection');
 
+      let cleanPass = pass.trim();
+      if ((provider === 'gmail' || (!provider && user.includes('@gmail.com'))) && cleanPass.includes(' ')) {
+        cleanPass = cleanPass.replace(/\s+/g, '');
+      }
+
       const account = await accountManager.addAccount({
         id: id || user.split('@')[0],
         provider: provider || 'gmail',
         user: user.trim(),
-        pass: pass.trim(),
+        pass: cleanPass,
         imapHost: imapHost || undefined,
         imapPort: imapPort ? parseInt(imapPort, 10) : undefined,
         smtpHost: smtpHost || undefined,
