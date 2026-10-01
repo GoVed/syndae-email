@@ -14,6 +14,12 @@ import {
   exchangeCodeForTokens,
   fetchUserProfile,
 } from '../auth/oauth.js';
+import {
+  renderMailboxDashboardHtml,
+  renderOAuthConfigHtml,
+  renderOAuthSuccessHtml,
+  renderOAuthErrorHtml,
+} from './ui.js';
 import logger from '../utils/logger.js';
 import config from '../config.js';
 
@@ -33,6 +39,7 @@ function cleanPendingOAuthSessions() {
 export function createHttpApp(options = {}) {
   const app = express();
   app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
 
   let accountManager = options.accountManager;
   let emailClient = options.emailClient;
@@ -56,6 +63,14 @@ export function createHttpApp(options = {}) {
     next();
   });
 
+  // Interactive Web Dashboard on GET / and GET /setup
+  app.get(['/', '/setup'], (req, res) => {
+    const html = renderMailboxDashboardHtml(accountManager.listAccounts(), relay.stats);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  });
+
+  // MCP JSON-RPC Handler for POST / and POST /mcp
   const jsonRpcHandler = async (req, res) => {
     try {
       const resp = await mcpServer.handleJsonRpc(req.body);
@@ -108,6 +123,33 @@ export function createHttpApp(options = {}) {
     res.json({ accounts: accountManager.listAccounts() });
   });
 
+  // Direct Account Addition (App Passwords or Static Keys - 10-Second Setup)
+  app.post('/accounts/add', async (req, res) => {
+    try {
+      const { id, provider, user, pass, imapHost, imapPort, smtpHost, smtpPort } = req.body || {};
+      if (!user) return res.status(400).json({ success: false, error: 'Missing email address' });
+      if (!pass) return res.status(400).json({ success: false, error: 'Missing password or App Password' });
+
+      logger.info({ provider, user: config.maskEmail(user) }, 'Attempting direct mailbox connection');
+
+      const account = await accountManager.addAccount({
+        id: id || user.split('@')[0],
+        provider: provider || 'gmail',
+        user: user.trim(),
+        pass: pass.trim(),
+        imapHost: imapHost || undefined,
+        imapPort: imapPort ? parseInt(imapPort, 10) : undefined,
+        smtpHost: smtpHost || undefined,
+        smtpPort: smtpPort ? parseInt(smtpPort, 10) : undefined,
+      });
+
+      res.json({ success: true, account });
+    } catch (err) {
+      logger.error({ err: err.message }, 'Failed to connect email account');
+      res.status(400).json({ success: false, error: err.message });
+    }
+  });
+
   app.post('/accounts/remove', async (req, res) => {
     try {
       const { id } = req.body || {};
@@ -119,7 +161,7 @@ export function createHttpApp(options = {}) {
     }
   });
 
-  // Modern Auth 1-Click Connect Endpoint
+  // Modern Auth 1-Click Connect Endpoint (Google Cloud OAuth 2.0 PKCE)
   app.get('/auth/connect', (req, res) => {
     cleanPendingOAuthSessions();
     const provider = (req.query.provider || 'gmail').toLowerCase();
@@ -238,142 +280,6 @@ export function createHttpApp(options = {}) {
   });
 
   return { app, emailClient, accountManager, mcpServer, relay };
-}
-
-function renderOAuthConfigHtml({ provider, accountId, redirectUri }) {
-  const isGmail = provider === 'gmail';
-  const placeholder = isGmail ? '1234567890-abc123xyz.apps.googleusercontent.com' : 'Your OAuth Application (Client) ID';
-  const consoleLink = isGmail
-    ? 'https://console.cloud.google.com/apis/credentials'
-    : 'https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade';
-
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Connect ${provider.toUpperCase()} - Styx Agent OS</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 1rem; }
-    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 2rem; max-width: 560px; width: 100%; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }
-    h2 { margin-top: 0; color: #38bdf8; font-size: 1.4rem; }
-    p { color: #94a3b8; font-size: 0.95rem; line-height: 1.5; }
-    label { display: block; margin-top: 1rem; font-weight: 500; font-size: 0.85rem; color: #cbd5e1; }
-    input { width: 100%; box-sizing: border-box; padding: 0.65rem; margin-top: 0.3rem; background: #0f172a; border: 1px solid #475569; border-radius: 6px; color: #fff; font-size: 0.9rem; }
-    .btn { display: inline-block; margin-top: 1.5rem; width: 100%; box-sizing: border-box; background: #0284c7; color: #fff; border: none; padding: 0.75rem; border-radius: 6px; font-weight: 600; cursor: pointer; text-align: center; text-decoration: none; }
-    .btn:hover { background: #0369a1; }
-    .code-box { background: #0f172a; padding: 0.5rem; border-radius: 4px; font-family: monospace; font-size: 0.82rem; word-break: break-all; color: #38bdf8; border: 1px solid #334155; }
-    .alert-box { background: #1e1b4b; border: 1px solid #4338ca; border-radius: 8px; padding: 0.85rem; margin-top: 1rem; font-size: 0.85rem; color: #c7d2fe; line-height: 1.4; }
-    .alert-warn { background: #451a03; border-color: #b45309; color: #fde68a; }
-    .err-msg { display: none; color: #f87171; font-size: 0.85rem; margin-top: 0.5rem; font-weight: 500; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h2>Connect ${isGmail ? 'Google Gmail' : 'Microsoft Outlook'} (OAuth 2.0)</h2>
-    <p>To connect Styx using Modern Auth without storing static passwords, enter your OAuth App credentials from <a href="${consoleLink}" target="_blank" style="color:#38bdf8; text-decoration:underline;">${isGmail ? 'Google Cloud Console' : 'Azure Portal'} &nearr;</a></p>
-
-    <div style="margin-bottom: 1rem;">
-      <span style="font-size:0.8rem; color:#94a3b8; font-weight: 500;">1. Authorized Redirect URI (add to your OAuth Client in console):</span>
-      <div class="code-box">${redirectUri}</div>
-    </div>
-
-    ${isGmail ? `
-    <div class="alert-box alert-warn">
-      <strong>⚠️ Important for Google OAuth:</strong><br>
-      • Copy the <strong>OAuth 2.0 Client ID</strong> under "OAuth 2.0 Client IDs" (ends with <code>.apps.googleusercontent.com</code>).<br>
-      • Do <strong>NOT</strong> paste your Project ID, Project Name, or API Key (<code>AIza...</code>).
-    </div>
-    ` : ''}
-
-    <form method="GET" action="/auth/connect" id="oauthForm">
-      <input type="hidden" name="provider" value="${provider}">
-      <label>Account ID / Mailbox Label (e.g. personal, work, school)</label>
-      <input type="text" name="account" value="${accountId}" required>
-
-      <label>OAuth Client ID</label>
-      <input type="text" id="clientIdInput" name="client_id" placeholder="${placeholder}" required>
-      <div id="clientIdError" class="err-msg"></div>
-
-      <label>Client Secret (Optional for PKCE public clients)</label>
-      <input type="password" name="client_secret" placeholder="Your OAuth Client Secret">
-
-      <button type="submit" class="btn">Continue to Provider Login &rarr;</button>
-    </form>
-  </div>
-
-  <script>
-    const form = document.getElementById('oauthForm');
-    const input = document.getElementById('clientIdInput');
-    const err = document.getElementById('clientIdError');
-    const provider = "${provider}";
-
-    form.addEventListener('submit', function(e) {
-      const val = input.value.trim();
-      if (provider === 'gmail' && !val.endsWith('.apps.googleusercontent.com')) {
-        e.preventDefault();
-        err.style.display = 'block';
-        err.innerHTML = '❌ Invalid Google Client ID. It must end with <code>.apps.googleusercontent.com</code>.<br>Please copy the Client ID from <em>Google Cloud Console &rarr; APIs &amp; Services &rarr; Credentials &rarr; OAuth 2.0 Client IDs</em>, not the Project ID or API Key.';
-      } else {
-        err.style.display = 'none';
-      }
-    });
-  </script>
-</body>
-</html>`;
-}
-
-function renderOAuthSuccessHtml({ account, email, provider }) {
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Connected - Styx Agent OS</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
-    .card { background: #1e293b; border: 1px solid #10b981; border-radius: 12px; padding: 2.5rem; max-width: 480px; width: 90%; text-align: center; }
-    .icon { font-size: 3rem; color: #10b981; margin-bottom: 1rem; }
-    h2 { margin: 0; color: #f8fafc; }
-    p { color: #94a3b8; font-size: 0.95rem; line-height: 1.5; }
-    .badge { display: inline-block; background: #064e3b; color: #6ee7b7; padding: 0.3rem 0.8rem; border-radius: 9999px; font-size: 0.85rem; font-weight: 500; margin: 0.5rem 0; }
-    .btn { display: inline-block; margin-top: 1.5rem; background: #0284c7; color: #fff; padding: 0.75rem 1.5rem; border-radius: 6px; font-weight: 600; text-decoration: none; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <div class="icon">✓</div>
-    <h2>Account Connected!</h2>
-    <div class="badge">${provider.toUpperCase()} &bull; ${account.id}</div>
-    <p>Successfully authenticated <strong>${email}</strong> with OAuth 2.0 refresh tokens. IMAP IDLE real-time push is now active.</p>
-    <a href="/status" class="btn">View Status</a>
-  </div>
-</body>
-</html>`;
-}
-
-function renderOAuthErrorHtml(errorMsg) {
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Connection Error - Styx</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
-    .card { background: #1e293b; border: 1px solid #ef4444; border-radius: 12px; padding: 2.5rem; max-width: 480px; width: 90%; text-align: center; }
-    .icon { font-size: 3rem; color: #ef4444; margin-bottom: 1rem; }
-    h2 { margin: 0; color: #f8fafc; }
-    p { color: #fca5a5; font-size: 0.95rem; line-height: 1.5; }
-    .btn { display: inline-block; margin-top: 1.5rem; background: #334155; color: #fff; padding: 0.75rem 1.5rem; border-radius: 6px; font-weight: 600; text-decoration: none; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <div class="icon">✕</div>
-    <h2>Connection Failed</h2>
-    <p>${errorMsg}</p>
-    <a href="/auth/connect" class="btn">Try Again</a>
-  </div>
-</body>
-</html>`;
 }
 
 export async function startHttpServer(port = config.httpPort, host = config.httpHost) {
