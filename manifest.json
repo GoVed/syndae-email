@@ -2,13 +2,19 @@
   "name": "email",
   "display_name": "Universal Email (IMAP & SMTP)",
   "version": "1.0.0",
-  "description": "Universal IMAP & SMTP Email MCP Micro-Daemon with Real-Time IMAP IDLE Push for Styx Agent OS",
+  "description": "Universal Multi-Account IMAP & SMTP Email MCP Micro-Daemon with Modern Auth (OAuth 2.0 PKCE / XOAUTH2) and Real-Time IMAP IDLE Push for Styx Agent OS",
   "container_name": "styx-email-connector",
   "port": 8771,
   "protocol": "email",
   "instructions_file": "instructions.md",
   "has_docker": true,
   "tools": [
+    {
+      "name": "list_accounts",
+      "description": "List all configured email accounts, their providers, masked addresses, and real-time connection status",
+      "risk_level": "LOW",
+      "policy": "AUTONOMOUS"
+    },
     {
       "name": "list_emails",
       "description": "Fetch a list of recent emails from mailbox with envelope headers, read status, and attachment flags",

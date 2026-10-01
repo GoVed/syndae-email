@@ -1,4 +1,5 @@
 import { TOOL_DEFINITIONS } from './definitions.js';
+import { AccountManager } from '../email/manager.js';
 import { EmailClient } from '../email/client.js';
 import logger from '../utils/logger.js';
 import config from '../config.js';
@@ -9,8 +10,41 @@ export const SERVER_INFO = {
 };
 
 export class EmailMcpServer {
-  constructor(emailClient = null) {
-    this.emailClient = emailClient || new EmailClient();
+  constructor(managerOrClient = null) {
+    if (managerOrClient && typeof managerOrClient.listAccounts === 'function') {
+      this.manager = managerOrClient;
+    } else if (managerOrClient) {
+      // Adapt single EmailClient (or mock) to AccountManager interface
+      const client = managerOrClient;
+      this.manager = {
+        listAccounts: () => [
+          client.getSummary ? client.getSummary() : {
+            id: client.id || 'primary',
+            user: client.getMaskedUser ? client.getMaskedUser() : 'configured',
+            provider: client.cfg?.provider || 'custom',
+            connected: Boolean(client.connected),
+            authType: client.authType || 'password',
+            idleActive: Boolean(client.idleActive),
+          }
+        ],
+        listEmails: (opts) => client.listEmails(opts),
+        readEmail: (opts) => client.readEmail(opts),
+        searchEmails: (opts) => client.searchEmails(opts),
+        sendEmail: (opts) => client.sendEmail({
+          to: opts.to,
+          subject: opts.subject,
+          text: opts.body,
+          html: opts.html,
+          cc: opts.cc,
+          bcc: opts.bcc,
+          replyTo: opts.replyTo,
+          inReplyTo: opts.inReplyTo,
+        }),
+        archiveOrMarkEmail: (opts) => client.archiveOrMarkEmail(opts),
+      };
+    } else {
+      this.manager = new AccountManager();
+    }
   }
 
   async handleJsonRpc(req) {
@@ -104,8 +138,13 @@ export class EmailMcpServer {
 
   async executeTool(name, args) {
     switch (name) {
+      case 'list_accounts': {
+        return await this.manager.listAccounts();
+      }
+
       case 'list_emails': {
-        return await this.emailClient.listEmails({
+        return await this.manager.listEmails({
+          account: args.account || null,
           folder: args.folder || 'INBOX',
           limit: args.limit ? parseInt(args.limit, 10) : 20,
           unreadOnly: Boolean(args.unread_only),
@@ -117,7 +156,8 @@ export class EmailMcpServer {
         if (args.uid === undefined || args.uid === null) {
           throw new Error('Missing required argument: uid');
         }
-        return await this.emailClient.readEmail({
+        return await this.manager.readEmail({
+          account: args.account || null,
           uid: parseInt(args.uid, 10),
           folder: args.folder || 'INBOX',
           markAsRead: args.mark_as_read !== false,
@@ -128,7 +168,8 @@ export class EmailMcpServer {
         if (!args.query) {
           throw new Error('Missing required argument: query');
         }
-        return await this.emailClient.searchEmails({
+        return await this.manager.searchEmails({
+          account: args.account || null,
           query: args.query,
           folder: args.folder || 'INBOX',
           limit: args.limit ? parseInt(args.limit, 10) : 20,
@@ -139,10 +180,11 @@ export class EmailMcpServer {
         if (!args.to || !args.subject || !args.body) {
           throw new Error('Missing required arguments: to, subject, body');
         }
-        return await this.emailClient.sendEmail({
+        return await this.manager.sendEmail({
+          account: args.account || null,
           to: args.to,
           subject: args.subject,
-          text: args.body,
+          body: args.body,
           html: args.html || null,
           cc: args.cc || null,
           bcc: args.bcc || null,
@@ -155,7 +197,8 @@ export class EmailMcpServer {
         if (args.uid === undefined || args.uid === null || !args.action) {
           throw new Error('Missing required arguments: uid, action');
         }
-        return await this.emailClient.archiveOrMarkEmail({
+        return await this.manager.archiveOrMarkEmail({
+          account: args.account || null,
           uid: parseInt(args.uid, 10),
           action: args.action,
           folder: args.folder || 'INBOX',

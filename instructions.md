@@ -1,67 +1,60 @@
-# Universal Email MCP Tool (IMAP & SMTP)
+# Universal Email MCP Tool (IMAP & SMTP with Modern Auth)
 
 ## Overview
-The `email` tool enables Styx agents to read, search, and send emails across any standard email provider (Gmail, Outlook, iCloud, Fastmail, ProtonMail Bridge, or self-hosted mail servers) using 100% open standards (IMAP over TLS + SMTP over TLS).
+The `email` tool enables Styx agents to read, search, draft, and send emails across multiple email accounts simultaneously using Modern Auth (OAuth 2.0 PKCE / SASL XOAUTH2) and open standards (IMAP + SMTP over TLS).
 
-## Features
-1. **Real-time IMAP IDLE Push**:
-   - Maintains an open socket to your inbox using the standard IMAP `IDLE` command.
-   - When a new email arrives, it is immediately parsed and forwarded to Styx (`POST /api/tools/trigger` with `protocol: "email"`).
-   - Zero polling overhead and instant responsiveness.
-2. **Deterministic Human-in-the-Loop Send Gating**:
-   - `send_email` and `archive_or_mark_email` are categorized as `REQUIRE_APPROVAL` (Ask).
-   - When Styx drafts an email, an approval ticket appears in the UI. Styx cannot send emails without operator authorization.
-3. **Channel Trigger Rules & Spam Filtering**:
-   - Senders appear in Styx **Tool Hub → Inbound Trigger Rules & Channels**.
-   - You can set newsletters or automated receipts to `Muted` (0 GPU inference), VIP senders to `Always`, or general contacts to `Mentions Only`.
+## Key Features
+1. **Multi-Account Mailbox Architecture**:
+   - Register, manage, and monitor multiple distinct mailboxes concurrently (e.g. `work`, `personal`, `school`).
+   - Query individual inboxes or seamlessly aggregate recent emails across all accounts.
+   - Dispatch outgoing emails from specific mailboxes using the `account` parameter.
+2. **Modern Auth (OAuth 2.0 PKCE & XOAUTH2)**:
+   - Zero static passwords stored on disk.
+   - Interactive 1-click browser authentication (`/auth/connect`) exchanging PKCE codes for secure OAuth 2.0 refresh tokens.
+   - Automatic background token rotation ensures continuous operation without re-prompting.
+3. **Concurrent Real-time IMAP IDLE Push**:
+   - Maintains open sockets across all registered accounts.
+   - Inbound emails immediately trigger Styx (`POST /api/tools/trigger` with `protocol: "email"`), tagged with account mailbox metadata.
+4. **Deterministic Human-in-the-Loop Send Gating**:
+   - Outbound emails (`send_email`) and destructive modifications (`archive_or_mark_email`) require approval tickets in Styx.
 
-## Provider Setup
+---
 
-### 1. Gmail / Google Workspace (Recommended)
-1. Go to your [Google Account Security Settings](https://myaccount.google.com/security).
-2. Ensure **2-Step Verification** is turned on.
-3. Search for **"App passwords"** and create a new password named `Styx`.
-4. Copy the generated 16-character password into `.env`:
-   ```bash
-   EMAIL_PROVIDER=gmail
-   EMAIL_USER=your_email@gmail.com
-   EMAIL_PASS=xxxx xxxx xxxx xxxx
+## Modern Auth Setup (1-Click Connect)
+
+### Google Gmail / Google Workspace (OAuth 2.0)
+1. Open your browser and navigate to:
    ```
+   http://localhost:8771/auth/connect?provider=gmail&account=personal
+   ```
+2. If OAuth App credentials are not yet set in environment, enter your Google OAuth `Client ID` and `Client Secret` (configured with authorized redirect URI `http://localhost:8771/auth/callback`).
+3. Complete the Google Consent screen.
+4. The micro-daemon automatically persists encrypted refresh tokens to `data/accounts.json` (`chmod 600`) and begins real-time push immediately.
 
-### 2. Microsoft Outlook / Office 365
+### Microsoft Outlook / Office 365 (OAuth 2.0)
+1. Navigate to:
+   ```
+   http://localhost:8771/auth/connect?provider=outlook&account=work
+   ```
+2. Authorize via Microsoft Online consent screen.
+3. The mailbox is registered and active instantly.
+
+---
+
+## Static App Password Setup (Alternative)
+For providers without OAuth 2.0 or for local setups, you can still configure static App Passwords:
 ```bash
-EMAIL_PROVIDER=outlook
-EMAIL_USER=your_email@outlook.com
-EMAIL_PASS=your_app_password
+EMAIL_PROVIDER=gmail # or outlook, icloud, custom
+EMAIL_USER=your_email@gmail.com
+EMAIL_PASS=xxxx xxxx xxxx xxxx
 ```
 
-### 3. Apple iCloud
-1. Go to [appleid.apple.com](https://appleid.apple.com/) → Sign-In and Security → **App-Specific Passwords**.
-2. Generate a password for `Styx`.
-3. In `.env`:
-   ```bash
-   EMAIL_PROVIDER=icloud
-   EMAIL_USER=your_username@icloud.com
-   EMAIL_PASS=xxxx-xxxx-xxxx-xxxx
-   ```
+---
 
-### 4. Custom / Self-Hosted IMAP & SMTP
-```bash
-EMAIL_PROVIDER=custom
-IMAP_HOST=mail.yourdomain.com
-IMAP_PORT=993
-IMAP_SECURE=true
-SMTP_HOST=mail.yourdomain.com
-SMTP_PORT=465
-SMTP_SECURE=true
-EMAIL_USER=user@yourdomain.com
-EMAIL_PASS=your_password
-```
-
-## Security Best Practices
-- **Never use your master account password**: Always use a scoped **App Password** or **App-Specific Token**.
-- **Protect your `.env` file**:
-  ```bash
-  chmod 600 /home/ved/Projects/styx_tools/email/.env
-  ```
-- **In-Memory Injection**: Credentials can also be supplied dynamically at runtime or via environment variables in docker-compose.
+## Available MCP Tools
+- **`list_accounts`** (LOW / Autonomous): List all configured mailboxes, providers, and live connection status.
+- **`list_emails`** (LOW / Autonomous): Fetch recent emails from a specific account or aggregated across all accounts.
+- **`read_email`** (LOW / Autonomous): Read full email body and attachment summaries.
+- **`search_emails`** (LOW / Autonomous): Full-text search across subject, body, and sender.
+- **`send_email`** (HIGH / Require Approval): Dispatch outbound email via SMTP with thread headers.
+- **`archive_or_mark_email`** (MEDIUM / Require Approval): Star, read/unread, move, or trash emails.

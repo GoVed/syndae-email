@@ -19,10 +19,19 @@ services:
       - SMTP_HOST=${SMTP_HOST:-}
       - SMTP_PORT=${SMTP_PORT:-}
       - SMTP_SECURE=${SMTP_SECURE:-}
+      - OAUTH2_CLIENT_ID=${OAUTH2_CLIENT_ID:-}
+      - OAUTH2_CLIENT_SECRET=${OAUTH2_CLIENT_SECRET:-}
+      - OAUTH2_REFRESH_TOKEN=${OAUTH2_REFRESH_TOKEN:-}
+      - GMAIL_CLIENT_ID=${GMAIL_CLIENT_ID:-}
+      - GMAIL_CLIENT_SECRET=${GMAIL_CLIENT_SECRET:-}
+      - OUTLOOK_CLIENT_ID=${OUTLOOK_CLIENT_ID:-}
+      - OUTLOOK_CLIENT_SECRET=${OUTLOOK_CLIENT_SECRET:-}
       - ENABLE_IDLE=${ENABLE_IDLE:-true}
       - STYX_API_URL=http://host.docker.internal:3000
       - STYX_ACCESS_KEY=${STYX_ACCESS_KEY:-styx-local-dev-key}
       - LOG_LEVEL=info
+    volumes:
+      - ./data:/app/data
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:

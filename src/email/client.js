@@ -22,11 +22,26 @@ export class EmailClient {
       enableIdle: customConfig.enableIdle !== undefined ? customConfig.enableIdle : config.enableIdle,
     };
 
+    this.id = customConfig.id || 'primary';
+    this.authType = customConfig.authType || (this.cfg.oauth2RefreshToken ? 'oauth2' : 'password');
+    this.onTokenRefresh = customConfig.onTokenRefresh || null;
+
     this.imap = null;
     this.smtp = null;
     this.connected = false;
     this.idleActive = false;
     this.statusListeners = [];
+  }
+
+  getSummary() {
+    return {
+      id: this.id,
+      email: this.getMaskedUser(),
+      provider: this.cfg.provider,
+      authType: this.authType,
+      connected: this.connected,
+      idleActive: this.idleActive,
+    };
   }
 
   isConfigured() {
@@ -176,6 +191,7 @@ export class EmailClient {
 
         messages.push({
           uid: msg.uid,
+          account: this.id,
           messageId: msg.envelope?.messageId || `uid-${msg.uid}`,
           from: fromAddr ? { name: fromAddr.name, address: fromAddr.address || `${fromAddr.mailbox}@${fromAddr.host}` } : null,
           to: toAddrs,
@@ -211,6 +227,7 @@ export class EmailClient {
 
       return {
         uid,
+        account: this.id,
         messageId: parsed.messageId || `uid-${uid}`,
         subject: parsed.subject || '(No Subject)',
         from: parsed.from?.value?.[0] ? { name: parsed.from.value[0].name, address: parsed.from.value[0].address } : null,
@@ -264,6 +281,7 @@ export class EmailClient {
         const fromAddr = msg.envelope?.from?.[0];
         messages.push({
           uid: msg.uid,
+          account: this.id,
           messageId: msg.envelope?.messageId || `uid-${msg.uid}`,
           from: fromAddr ? { name: fromAddr.name, address: fromAddr.address || `${fromAddr.mailbox}@${fromAddr.host}` } : null,
           subject: msg.envelope?.subject || '(No Subject)',

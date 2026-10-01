@@ -1,5 +1,15 @@
 export const TOOL_DEFINITIONS = [
   {
+    name: 'list_accounts',
+    description: 'List all configured email accounts, their providers, masked addresses, and real-time connection status.',
+    risk_level: 'LOW',
+    policy: 'AUTONOMOUS',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
     name: 'list_emails',
     description: 'Fetch a list of recent emails from the mailbox with envelope headers, read status, and attachment flags.',
     risk_level: 'LOW',
@@ -7,6 +17,10 @@ export const TOOL_DEFINITIONS = [
     inputSchema: {
       type: 'object',
       properties: {
+        account: {
+          type: 'string',
+          description: 'Specific email account/mailbox ID to fetch from (omit to aggregate recent emails across all accounts)',
+        },
         folder: {
           type: 'string',
           description: 'Mailbox folder to list from (default: INBOX)',
@@ -37,6 +51,10 @@ export const TOOL_DEFINITIONS = [
     inputSchema: {
       type: 'object',
       properties: {
+        account: {
+          type: 'string',
+          description: 'Specific email account ID containing the message (defaults to primary/first account)',
+        },
         uid: {
           type: 'number',
           description: 'The unique message UID to read',
@@ -63,6 +81,10 @@ export const TOOL_DEFINITIONS = [
     inputSchema: {
       type: 'object',
       properties: {
+        account: {
+          type: 'string',
+          description: 'Specific email account ID to search within (omit to search across all accounts)',
+        },
         query: {
           type: 'string',
           description: 'Search query string to find in subject, body, or sender address',
@@ -89,6 +111,10 @@ export const TOOL_DEFINITIONS = [
     inputSchema: {
       type: 'object',
       properties: {
+        account: {
+          type: 'string',
+          description: 'Email account ID to send from (defaults to primary/first account)',
+        },
         to: {
           type: 'string',
           description: 'Recipient email address (or comma-separated addresses)',
@@ -133,6 +159,10 @@ export const TOOL_DEFINITIONS = [
     inputSchema: {
       type: 'object',
       properties: {
+        account: {
+          type: 'string',
+          description: 'Email account ID containing the message (defaults to primary/first account)',
+        },
         uid: {
           type: 'number',
           description: 'Message UID to update',

@@ -2,8 +2,8 @@ import logger from '../utils/logger.js';
 import config from '../config.js';
 
 export class StyxEmailRelay {
-  constructor(emailClient, options = {}) {
-    this.emailClient = emailClient;
+  constructor(target, options = {}) {
+    this.target = target;
     this.styxApiUrl = (options.styxApiUrl || config.styxApiUrl).replace(/\/$/, '');
     this.styxAccessKey = options.styxAccessKey !== undefined ? options.styxAccessKey : config.styxAccessKey;
     this.running = false;
@@ -16,17 +16,25 @@ export class StyxEmailRelay {
   }
 
   async start() {
-    if (!this.emailClient || !this.emailClient.isConfigured()) {
-      logger.info('Email client not configured, Styx relay standing by.');
-      return;
-    }
-
     this.running = true;
     try {
-      await this.emailClient.startIdleListener(email => {
-        this.forwardEmailToStyx(email);
-      });
-      logger.info({ styxApiUrl: this.styxApiUrl }, 'Styx Email Inbound Relay active');
+      if (this.target && typeof this.target.startAllIdleListeners === 'function') {
+        await this.target.startAllIdleListeners((email, accountId) => {
+          this.forwardEmailToStyx(email, accountId);
+        });
+        logger.info({ styxApiUrl: this.styxApiUrl }, 'Styx Multi-Account Email Inbound Relay active');
+      } else if (this.target && typeof this.target.startIdleListener === 'function') {
+        if (!this.target.isConfigured()) {
+          logger.info('Email client not configured, Styx relay standing by.');
+          return;
+        }
+        await this.target.startIdleListener(email => {
+          this.forwardEmailToStyx(email, this.target.id || 'primary');
+        });
+        logger.info({ styxApiUrl: this.styxApiUrl }, 'Styx Email Inbound Relay active');
+      } else {
+        logger.info('Relay target has no IDLE listener capability; standing by.');
+      }
     } catch (err) {
       logger.error({ err: err.message }, 'Failed to start Styx Email Relay');
     }
@@ -44,24 +52,27 @@ export class StyxEmailRelay {
     return headers;
   }
 
-  async forwardEmailToStyx(email) {
+  async forwardEmailToStyx(email, accountId = null) {
     if (!email) return;
 
     const senderEmail = email.from?.address || 'unknown@sender.com';
     const senderName = email.from?.name || senderEmail;
     const triggerUrl = `${this.styxApiUrl}/api/tools/trigger`;
+    const acc = accountId || email.account || 'primary';
+    const accountTag = acc ? `[${acc}] ` : '';
 
     const requestBody = {
       protocol: 'email',
       event_type: 'new_email',
-      source_id: senderName ? `${senderName} <${senderEmail}>` : senderEmail,
+      source_id: senderName ? `${accountTag}${senderName} <${senderEmail}>` : `${accountTag}${senderEmail}`,
       channel_id: senderEmail,
       mode: 'chat',
       payload: {
+        account: acc,
         sender: senderEmail,
         sender_name: senderName,
         subject: email.subject || '(No Subject)',
-        message: `Subject: ${email.subject || '(No Subject)'}\nFrom: ${senderName} <${senderEmail}>\nDate: ${email.date}\n\n${email.text || ''}`.trim(),
+        message: `Account: ${acc}\nSubject: ${email.subject || '(No Subject)'}\nFrom: ${senderName} <${senderEmail}>\nDate: ${email.date}\n\n${email.text || ''}`.trim(),
         text: email.text || '',
         message_id: email.messageId,
         date: email.date,
