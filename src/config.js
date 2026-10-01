@@ -7,7 +7,7 @@ const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
-const PROVIDER_PRESETS = {
+export const PROVIDER_PRESETS = {
   gmail: {
     imapHost: 'imap.gmail.com',
     imapPort: 993,
@@ -57,25 +57,29 @@ export const config = {
   
   // IMAP Configuration
   get imapHost() {
-    return process.env.IMAP_HOST || PROVIDER_PRESETS[this.provider]?.imapHost || 'imap.gmail.com';
+    if (process.env.IMAP_HOST && process.env.IMAP_HOST.trim()) return process.env.IMAP_HOST.trim();
+    return PROVIDER_PRESETS[this.provider]?.imapHost || 'imap.gmail.com';
   },
   get imapPort() {
-    return parseInt(process.env.IMAP_PORT || PROVIDER_PRESETS[this.provider]?.imapPort || '993', 10);
+    if (process.env.IMAP_PORT && process.env.IMAP_PORT.trim()) return parseInt(process.env.IMAP_PORT.trim(), 10);
+    return PROVIDER_PRESETS[this.provider]?.imapPort || 993;
   },
   get imapSecure() {
-    if (process.env.IMAP_SECURE !== undefined) return process.env.IMAP_SECURE === 'true';
+    if (process.env.IMAP_SECURE && process.env.IMAP_SECURE.trim()) return process.env.IMAP_SECURE.trim() === 'true';
     return PROVIDER_PRESETS[this.provider]?.imapSecure ?? true;
   },
 
   // SMTP Configuration
   get smtpHost() {
-    return process.env.SMTP_HOST || PROVIDER_PRESETS[this.provider]?.smtpHost || 'smtp.gmail.com';
+    if (process.env.SMTP_HOST && process.env.SMTP_HOST.trim()) return process.env.SMTP_HOST.trim();
+    return PROVIDER_PRESETS[this.provider]?.smtpHost || 'smtp.gmail.com';
   },
   get smtpPort() {
-    return parseInt(process.env.SMTP_PORT || PROVIDER_PRESETS[this.provider]?.smtpPort || '465', 10);
+    if (process.env.SMTP_PORT && process.env.SMTP_PORT.trim()) return parseInt(process.env.SMTP_PORT.trim(), 10);
+    return PROVIDER_PRESETS[this.provider]?.smtpPort || 465;
   },
   get smtpSecure() {
-    if (process.env.SMTP_SECURE !== undefined) return process.env.SMTP_SECURE === 'true';
+    if (process.env.SMTP_SECURE && process.env.SMTP_SECURE.trim()) return process.env.SMTP_SECURE.trim() === 'true';
     return PROVIDER_PRESETS[this.provider]?.smtpSecure ?? true;
   },
 

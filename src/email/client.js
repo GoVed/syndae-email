@@ -3,7 +3,7 @@ import { ImapFlow } from 'imapflow';
 import nodemailer from 'nodemailer';
 import { simpleParser } from 'mailparser';
 import logger from '../utils/logger.js';
-import config from '../config.js';
+import { config, PROVIDER_PRESETS } from '../config.js';
 
 if (dns.setDefaultResultOrder) {
   dns.setDefaultResultOrder('ipv4first');
@@ -11,16 +11,19 @@ if (dns.setDefaultResultOrder) {
 
 export class EmailClient {
   constructor(customConfig = {}) {
+    const prov = (customConfig.provider || config.provider || 'gmail').toLowerCase();
+    const preset = PROVIDER_PRESETS[prov] || PROVIDER_PRESETS.gmail;
+
     this.cfg = {
-      provider: customConfig.provider || config.provider,
+      provider: prov,
       user: customConfig.user || config.user,
       pass: customConfig.pass || config.pass,
-      imapHost: customConfig.imapHost || config.imapHost,
-      imapPort: customConfig.imapPort || config.imapPort,
-      imapSecure: customConfig.imapSecure !== undefined ? customConfig.imapSecure : config.imapSecure,
-      smtpHost: customConfig.smtpHost || config.smtpHost,
-      smtpPort: customConfig.smtpPort || config.smtpPort,
-      smtpSecure: customConfig.smtpSecure !== undefined ? customConfig.smtpSecure : config.smtpSecure,
+      imapHost: customConfig.imapHost || preset.imapHost,
+      imapPort: customConfig.imapPort || preset.imapPort,
+      imapSecure: customConfig.imapSecure !== undefined ? customConfig.imapSecure : (preset.imapSecure ?? true),
+      smtpHost: customConfig.smtpHost || preset.smtpHost,
+      smtpPort: customConfig.smtpPort || preset.smtpPort,
+      smtpSecure: customConfig.smtpSecure !== undefined ? customConfig.smtpSecure : (preset.smtpSecure ?? true),
       oauth2ClientId: customConfig.oauth2ClientId || config.oauth2ClientId,
       oauth2ClientSecret: customConfig.oauth2ClientSecret || config.oauth2ClientSecret,
       oauth2RefreshToken: customConfig.oauth2RefreshToken || config.oauth2RefreshToken,
