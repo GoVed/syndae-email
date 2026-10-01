@@ -167,6 +167,7 @@ export class EmailClient {
   async disconnect() {
     try {
       if (this.imap) {
+        this.imap.removeAllListeners('exists');
         await this.imap.logout();
       }
     } catch (e) {
@@ -397,12 +398,14 @@ export class EmailClient {
     await this.ensureConnected();
 
     try {
-      const lock = await this.imap.getMailboxLock('INBOX');
-      this.idleActive = true;
-      logger.info('IMAP IDLE push listener active on INBOX');
+      // Remove any previously registered exists listener to prevent duplication
+      this.imap.removeAllListeners('exists');
 
       this.imap.on('exists', async data => {
         try {
+          if (data.prevCount !== undefined && data.count <= data.prevCount) {
+            return;
+          }
           logger.info({ newCount: data.count, prevCount: data.prevCount }, 'New email notification received via IMAP IDLE');
           // Fetch the latest incoming message
           const latest = await this.listEmails({ folder: 'INBOX', limit: 1 });
@@ -416,6 +419,12 @@ export class EmailClient {
           logger.error({ err: e.message }, 'Error handling IMAP IDLE exists event');
         }
       });
+
+      // Opening INBOX puts ImapFlow in SELECTED state, allowing its built-in auto-IDLE
+      // to run concurrently while releasing locks so RPC queries do not deadlock
+      await this.imap.mailboxOpen('INBOX');
+      this.idleActive = true;
+      logger.info('IMAP IDLE push listener active on INBOX');
     } catch (err) {
       this.idleActive = false;
       logger.warn({ err: err.message }, 'Failed to start IMAP IDLE listener');
