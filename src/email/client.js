@@ -1,8 +1,13 @@
+import dns from 'dns';
 import { ImapFlow } from 'imapflow';
 import nodemailer from 'nodemailer';
 import { simpleParser } from 'mailparser';
 import logger from '../utils/logger.js';
 import config from '../config.js';
+
+if (dns.setDefaultResultOrder) {
+  dns.setDefaultResultOrder('ipv4first');
+}
 
 export class EmailClient {
   constructor(customConfig = {}) {
@@ -88,7 +93,12 @@ export class EmailClient {
         port: this.cfg.imapPort,
         secure: this.cfg.imapSecure,
         auth: this.getImapAuth(),
-        logger: false,
+        logger: {
+          debug: (d) => logger.debug({ imap: d.msg || d }),
+          info: (d) => logger.info({ imap: d.msg || d }),
+          warn: (d) => logger.warn({ imap: d.msg || d }),
+          error: (d) => logger.error({ imap: d.msg || d }),
+        },
         clientInfo: {
           name: 'Styx-Agent-OS',
           version: '1.0.0',

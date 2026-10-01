@@ -1,7 +1,12 @@
+import dns from 'dns';
 import { Command } from 'commander';
 import { startHttpServer } from './mcp/http.js';
 import { AccountManager } from './email/manager.js';
 import { EmailClient } from './email/client.js';
+
+if (dns.setDefaultResultOrder) {
+  dns.setDefaultResultOrder('ipv4first');
+}
 
 const program = new Command();
 

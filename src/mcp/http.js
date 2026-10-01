@@ -1,6 +1,11 @@
+import dns from 'dns';
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
+
+if (dns.setDefaultResultOrder) {
+  dns.setDefaultResultOrder('ipv4first');
+}
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { EmailMcpServer, SERVER_INFO } from './server.js';
