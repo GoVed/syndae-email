@@ -56,4 +56,4 @@ docker-compose up -d
 | `archive_or_mark_email` | `uid`, `action`, `folder`, `target_folder` | MEDIUM | REQUIRE_APPROVAL | Mark read/unread, flag, move, or delete |
 
 ## License
-MIT
+Apache License 2.0. See [LICENSE](LICENSE) for details.
