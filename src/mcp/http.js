@@ -11,7 +11,7 @@ import { fileURLToPath } from 'url';
 import { EmailMcpServer, SERVER_INFO } from './server.js';
 import { AccountManager } from '../email/manager.js';
 import { EmailClient } from '../email/client.js';
-import { StyxEmailRelay } from '../email/relay.js';
+import { SyndaeEmailRelay } from '../email/relay.js';
 import {
   OAUTH_PROVIDERS,
   generatePkcePair,
@@ -57,13 +57,13 @@ export function createHttpApp(options = {}) {
   }
 
   const mcpServer = options.mcpServer || new EmailMcpServer(accountManager);
-  const relay = options.relay || new StyxEmailRelay(accountManager);
+  const relay = options.relay || new SyndaeEmailRelay(accountManager);
   accountManager.relay = relay;
 
   app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Styx-Access-Key');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Syndae-Access-Key');
     if (req.method === 'OPTIONS') return res.sendStatus(204);
     next();
   });
@@ -259,7 +259,7 @@ export function createHttpApp(options = {}) {
         accessToken: tokens.accessToken,
       });
 
-      const userEmail = profile?.email || `${session.accountId}@auth.styx`;
+      const userEmail = profile?.email || `${session.accountId}@auth.syndae`;
       const accountSummary = await accountManager.addAccount({
         id: session.accountId,
         provider: session.provider,
@@ -286,7 +286,7 @@ export function createHttpApp(options = {}) {
       res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
       return res.sendFile(instructionsPath);
     }
-    return res.status(404).send('# Styx Email Tool\nUniversal IMAP/SMTP connector.');
+    return res.status(404).send('# Syndae Email Tool\nUniversal IMAP/SMTP connector.');
   });
 
   return { app, emailClient, accountManager, mcpServer, relay };
@@ -300,13 +300,13 @@ export async function startHttpServer(port = config.httpPort, host = config.http
   accountManager.relay = relay;
 
   const server = app.listen(port, host, async () => {
-    logger.info({ port, host }, `Styx Email MCP Micro-Daemon listening on http://${host}:${port}`);
+    logger.info({ port, host }, `Syndae Email MCP Micro-Daemon listening on http://${host}:${port}`);
     await accountManager.connectAll();
     await relay.start();
   });
 
   const shutdown = async () => {
-    logger.info('Shutting down Styx Email Daemon...');
+    logger.info('Shutting down Syndae Email Daemon...');
     for (const client of accountManager.accounts.values()) {
       await client.disconnect().catch(() => {});
     }

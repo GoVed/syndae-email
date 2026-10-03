@@ -88,10 +88,10 @@ export const config = {
   oauth2ClientSecret: process.env.OAUTH2_CLIENT_SECRET || null,
   oauth2RefreshToken: process.env.OAUTH2_REFRESH_TOKEN || null,
 
-  // Real-time Push & Styx Inbound Gateway
+  // Real-time Push & Syndae Inbound Gateway
   enableIdle: process.env.ENABLE_IDLE !== 'false',
-  styxApiUrl: (process.env.STYX_API_URL || 'http://localhost:3000').replace(/\/$/, ''),
-  styxAccessKey: process.env.STYX_ACCESS_KEY || 'styx-local-dev-key',
+  syndaeApiUrl: (process.env.SYNDAE_API_URL || 'http://localhost:3000').replace(/\/$/, ''),
+  syndaeAccessKey: process.env.SYNDAE_ACCESS_KEY || 'syndae-local-dev-key',
 
   // Daemon HTTP Server
   httpPort: parseInt(process.env.HTTP_PORT || '8771', 10),

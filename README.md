@@ -1,20 +1,20 @@
-# Styx Universal Email MCP Micro-Daemon
+# Syndae Universal Email MCP Micro-Daemon
 
-Self-hosted, 100% private email micro-daemon for **Styx AI Agent OS**, exposing standard JSON-RPC 2.0 MCP endpoints to read, search, and send emails via open IMAP & SMTP standards, with real-time push via IMAP IDLE.
+Self-hosted, 100% private email micro-daemon for **Syndae AI Agent OS**, exposing standard JSON-RPC 2.0 MCP endpoints to read, search, and send emails via open IMAP & SMTP standards, with real-time push via IMAP IDLE.
 
 ## Features
 - **Universal Provider Support**: Works seamlessly with Gmail, Microsoft Outlook / Office 365, Apple iCloud, Fastmail, Yahoo, and self-hosted mailboxes.
-- **MCP 2024-11-05 Compliant**: Plugs into Styx Agent OS via HTTP or STDIO.
-- **Real-Time Push**: Employs IMAP `IDLE` (RFC 2177) to push incoming emails instantly to Styx without polling overhead.
-- **Human-in-the-Loop Safe**: Outbound email sending (`send_email`) is gated by Styx's approval ticket system.
-- **Channel Rules Compatible**: Inbound email senders automatically appear in Styx Tool Hub for 1-click trigger policy configuration (`Always`, `Mentions Only`, `Muted`).
+- **MCP 2024-11-05 Compliant**: Plugs into Syndae Agent OS via HTTP or STDIO.
+- **Real-Time Push**: Employs IMAP `IDLE` (RFC 2177) to push incoming emails instantly to Syndae without polling overhead.
+- **Human-in-the-Loop Safe**: Outbound email sending (`send_email`) is gated by Syndae's approval ticket system.
+- **Channel Rules Compatible**: Inbound email senders automatically appear in Syndae Tool Hub for 1-click trigger policy configuration (`Always`, `Mentions Only`, `Muted`).
 - **Container Ready**: Includes lightweight Dockerfile and docker-compose deployment.
 
 ## Installation & Setup
 
 ```bash
-git clone git@github.com:GoVed/styx-email.git
-cd styx-email
+git clone git@github.com:syndae-org/syndae-email.git
+cd syndae-email
 npm install
 npm test
 ```

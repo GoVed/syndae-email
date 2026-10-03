@@ -105,7 +105,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'send_email',
-    description: 'Draft and dispatch an outbound email via SMTP. Sensitive action: generates a Human-in-the-Loop approval ticket in Styx.',
+    description: 'Draft and dispatch an outbound email via SMTP. Sensitive action: generates a Human-in-the-Loop approval ticket in Syndae.',
     risk_level: 'HIGH',
     policy: 'REQUIRE_APPROVAL',
     inputSchema: {

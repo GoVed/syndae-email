@@ -11,8 +11,8 @@ if (dns.setDefaultResultOrder) {
 const program = new Command();
 
 program
-  .name('styx-email')
-  .description('Styx Universal Email MCP Micro-Daemon (Multi-Account IMAP & SMTP)')
+  .name('syndae-email')
+  .description('Syndae Universal Email MCP Micro-Daemon (Multi-Account IMAP & SMTP)')
   .version('1.0.0');
 
 program

@@ -1,18 +1,18 @@
 {
-  "name": "@styx-tools/email",
+  "name": "@syndae-tools/email",
   "version": "1.0.0",
-  "description": "Universal IMAP/SMTP Email MCP Micro-Daemon for Styx Agent OS",
+  "description": "Universal IMAP/SMTP Email MCP Micro-Daemon for Syndae Agent OS",
   "type": "module",
   "main": "src/index.js",
   "bin": {
-    "styx-email": "./bin/styx-email"
+    "syndae-email": "./bin/syndae-email"
   },
   "scripts": {
     "start": "node src/index.js daemon",
     "test": "node tests/email.test.js"
   },
   "keywords": [
-    "styx",
+    "syndae",
     "email",
     "imap",
     "smtp",
@@ -22,7 +22,7 @@
     "mcp",
     "agent-os"
   ],
-  "author": "Styx Community",
+  "author": "Syndae Community",
   "license": "MIT",
   "dependencies": {
     "commander": "^13.1.0",

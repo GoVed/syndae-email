@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import { TOOL_DEFINITIONS } from '../src/mcp/definitions.js';
 import { EmailMcpServer, SERVER_INFO } from '../src/mcp/server.js';
 import { AccountManager } from '../src/email/manager.js';
-import { StyxEmailRelay } from '../src/email/relay.js';
+import { SyndaeEmailRelay } from '../src/email/relay.js';
 import { createHttpApp } from '../src/mcp/http.js';
 import { generatePkcePair, generateAuthUrl } from '../src/auth/oauth.js';
 import config from '../src/config.js';
 
-console.log('--- Running Styx Multi-Account & Modern Auth Email Connector Tests ---');
+console.log('--- Running Syndae Multi-Account & Modern Auth Email Connector Tests ---');
 
 // Test 1: Tool definitions and safety policies
 console.log('Test 1: Verify MCP tool definitions, multi-account params, and safety policies...');
@@ -68,7 +68,7 @@ console.log('✓ PKCE and Modern Auth URL generation verified.');
 
 // Test 4: AccountManager Multi-Account Registry
 console.log('Test 4: Verify AccountManager multi-account aggregation and switching...');
-const testStoragePath = '/tmp/styx-test-accounts-' + Date.now() + '.json';
+const testStoragePath = '/tmp/syndae-test-accounts-' + Date.now() + '.json';
 const manager = new AccountManager({ storagePath: testStoragePath });
 
 const mockWorkClient = {
@@ -144,7 +144,7 @@ const initResp = await server.handleJsonRpc({
   params: { protocolVersion: '2024-11-05' }
 });
 assert.equal(initResp.result.protocolVersion, '2024-11-05');
-assert.equal(initResp.result.serverInfo.name, 'styx-email-server');
+assert.equal(initResp.result.serverInfo.name, 'syndae-email-server');
 
 // Test tools/list
 const listToolsResp = await server.handleJsonRpc({
@@ -178,7 +178,7 @@ assert.equal(listData[0].subject, 'Dentist Appointment');
 console.log('✓ MCP Server JSON-RPC multi-account handlers verified.');
 
 // Test 6: Inbound Relay Trigger Dispatch with Account Tagging
-console.log('Test 6: Verify StyxEmailRelay multi-account event formatting and dispatch...');
+console.log('Test 6: Verify SyndaeEmailRelay multi-account event formatting and dispatch...');
 let dispatchedUrl = null;
 let dispatchedBody = null;
 let dispatchedHeaders = null;
@@ -198,12 +198,12 @@ global.fetch = async (url, options) => {
   };
 };
 
-const relay = new StyxEmailRelay(manager, {
-  styxApiUrl: 'http://localhost:3000',
-  styxAccessKey: 'test-key-123',
+const relay = new SyndaeEmailRelay(manager, {
+  syndaeApiUrl: 'http://localhost:3000',
+  syndaeAccessKey: 'test-key-123',
 });
 
-await relay.forwardEmailToStyx({
+await relay.forwardEmailToSyndae({
   messageId: '<msg789@work.com>',
   from: { name: 'Colleague Bob', address: 'bob@work.com' },
   subject: 'Urgent: Release Deployment',
@@ -220,7 +220,7 @@ assert.equal(dispatchedBody.source_id, '[work] Colleague Bob <bob@work.com>');
 assert.equal(dispatchedBody.payload.account, 'work');
 assert.equal(dispatchedBody.payload.subject, 'Urgent: Release Deployment');
 assert.equal(dispatchedBody.payload.has_attachments, true);
-assert.equal(dispatchedHeaders['X-Styx-Access-Key'], 'test-key-123');
+assert.equal(dispatchedHeaders['X-Syndae-Access-Key'], 'test-key-123');
 console.log('✓ Inbound Relay multi-account event formatting verified.');
 
 // Test 7: HTTP Endpoints (/health, /status, /accounts, /auth/connect)

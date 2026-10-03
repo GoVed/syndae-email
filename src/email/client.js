@@ -103,7 +103,7 @@ export class EmailClient {
           error: (d) => logger.error({ imap: d.msg || d }),
         },
         clientInfo: {
-          name: 'Styx-Agent-OS',
+          name: 'Syndae-Agent-OS',
           version: '1.0.0',
         },
       });

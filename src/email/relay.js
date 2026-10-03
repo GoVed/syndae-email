@@ -1,11 +1,11 @@
 import logger from '../utils/logger.js';
 import config from '../config.js';
 
-export class StyxEmailRelay {
+export class SyndaeEmailRelay {
   constructor(target, options = {}) {
     this.target = target;
-    this.styxApiUrl = (options.styxApiUrl || config.styxApiUrl).replace(/\/$/, '');
-    this.styxAccessKey = options.styxAccessKey !== undefined ? options.styxAccessKey : config.styxAccessKey;
+    this.syndaeApiUrl = (options.syndaeApiUrl || config.syndaeApiUrl).replace(/\/$/, '');
+    this.syndaeAccessKey = options.syndaeAccessKey !== undefined ? options.syndaeAccessKey : config.syndaeAccessKey;
     this.running = false;
     this.stats = {
       relayedCount: 0,
@@ -20,44 +20,44 @@ export class StyxEmailRelay {
     try {
       if (this.target && typeof this.target.startAllIdleListeners === 'function') {
         await this.target.startAllIdleListeners((email, accountId) => {
-          this.forwardEmailToStyx(email, accountId);
+          this.forwardEmailToSyndae(email, accountId);
         });
-        logger.info({ styxApiUrl: this.styxApiUrl }, 'Styx Multi-Account Email Inbound Relay active');
+        logger.info({ syndaeApiUrl: this.syndaeApiUrl }, 'Syndae Multi-Account Email Inbound Relay active');
       } else if (this.target && typeof this.target.startIdleListener === 'function') {
         if (!this.target.isConfigured()) {
-          logger.info('Email client not configured, Styx relay standing by.');
+          logger.info('Email client not configured, Syndae relay standing by.');
           return;
         }
         await this.target.startIdleListener(email => {
-          this.forwardEmailToStyx(email, this.target.id || 'primary');
+          this.forwardEmailToSyndae(email, this.target.id || 'primary');
         });
-        logger.info({ styxApiUrl: this.styxApiUrl }, 'Styx Email Inbound Relay active');
+        logger.info({ syndaeApiUrl: this.syndaeApiUrl }, 'Syndae Email Inbound Relay active');
       } else {
         logger.info('Relay target has no IDLE listener capability; standing by.');
       }
     } catch (err) {
-      logger.error({ err: err.message }, 'Failed to start Styx Email Relay');
+      logger.error({ err: err.message }, 'Failed to start Syndae Email Relay');
     }
   }
 
   getHeaders() {
     const headers = {
       'Content-Type': 'application/json',
-      'User-Agent': 'Styx-Email-Relay/1.0.0',
+      'User-Agent': 'Syndae-Email-Relay/1.0.0',
     };
-    if (this.styxAccessKey) {
-      headers['Authorization'] = `Bearer ${this.styxAccessKey}`;
-      headers['X-Styx-Access-Key'] = this.styxAccessKey;
+    if (this.syndaeAccessKey) {
+      headers['Authorization'] = `Bearer ${this.syndaeAccessKey}`;
+      headers['X-Syndae-Access-Key'] = this.syndaeAccessKey;
     }
     return headers;
   }
 
-  async forwardEmailToStyx(email, accountId = null) {
+  async forwardEmailToSyndae(email, accountId = null) {
     if (!email) return;
 
     const senderEmail = email.from?.address || 'unknown@sender.com';
     const senderName = email.from?.name || senderEmail;
-    const triggerUrl = `${this.styxApiUrl}/api/tools/trigger`;
+    const triggerUrl = `${this.syndaeApiUrl}/api/tools/trigger`;
     const acc = accountId || email.account || 'primary';
     const accountTag = acc ? `[${acc}] ` : '';
 
@@ -86,7 +86,7 @@ export class StyxEmailRelay {
     try {
       logger.info(
         { triggerUrl, from: senderEmail, subject: email.subject },
-        'Relaying inbound email to Styx Agent OS'
+        'Relaying inbound email to Syndae Agent OS'
       );
 
       const res = await fetch(triggerUrl, {
@@ -101,7 +101,7 @@ export class StyxEmailRelay {
         this.stats.lastRelayedAt = new Date().toISOString();
         logger.info(
           { sender: senderEmail, ignored: data.ignored, policy: data.policy, sessionId: data.session_id },
-          'Email dispatched to Styx successfully'
+          'Email dispatched to Syndae successfully'
         );
         return data;
       } else {
@@ -109,17 +109,17 @@ export class StyxEmailRelay {
         this.stats.lastError = data.error || `HTTP ${res.status}`;
         logger.warn(
           { status: res.status, err: data.error },
-          'Styx returned error on email trigger dispatch'
+          'Syndae returned error on email trigger dispatch'
         );
         return null;
       }
     } catch (err) {
       this.stats.failedCount++;
       this.stats.lastError = err.message;
-      logger.error({ err: err.message }, 'Failed to dispatch email trigger to Styx');
+      logger.error({ err: err.message }, 'Failed to dispatch email trigger to Syndae');
       return null;
     }
   }
 }
 
-export default StyxEmailRelay;
+export default SyndaeEmailRelay;

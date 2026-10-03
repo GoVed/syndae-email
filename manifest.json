@@ -2,8 +2,8 @@
   "name": "email",
   "display_name": "Universal Email (IMAP & SMTP)",
   "version": "1.0.0",
-  "description": "Universal Multi-Account IMAP & SMTP Email MCP Micro-Daemon with Modern Auth (OAuth 2.0 PKCE / XOAUTH2) and Real-Time IMAP IDLE Push for Styx Agent OS",
-  "container_name": "styx-email-connector",
+  "description": "Universal Multi-Account IMAP & SMTP Email MCP Micro-Daemon with Modern Auth (OAuth 2.0 PKCE / XOAUTH2) and Real-Time IMAP IDLE Push for Syndae Agent OS",
+  "container_name": "syndae-email-connector",
   "port": 8771,
   "protocol": "email",
   "instructions_file": "instructions.md",
@@ -35,7 +35,7 @@
     },
     {
       "name": "send_email",
-      "description": "Draft and dispatch an outbound email via SMTP. Sensitive action: generates a Human-in-the-Loop approval ticket in Styx",
+      "description": "Draft and dispatch an outbound email via SMTP. Sensitive action: generates a Human-in-the-Loop approval ticket in Syndae",
       "risk_level": "HIGH",
       "policy": "REQUIRE_APPROVAL"
     },

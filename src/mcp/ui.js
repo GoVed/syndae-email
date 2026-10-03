@@ -1,5 +1,5 @@
 /**
- * Web UI templates for Styx Email MCP Micro-Daemon
+ * Web UI templates for Syndae Email MCP Micro-Daemon
  */
 
 export function renderMailboxDashboardHtml(accounts = [], stats = {}) {
@@ -40,7 +40,7 @@ export function renderMailboxDashboardHtml(accounts = [], stats = {}) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Styx Email Hub</title>
+  <title>Syndae Email Hub</title>
   <style>
     :root {
       --bg: #0f172a;
@@ -285,7 +285,7 @@ export function renderMailboxDashboardHtml(accounts = [], stats = {}) {
   <div class="container">
     <div class="header">
       <div class="title-group">
-        <h1><span>📬</span> Styx Email Hub</h1>
+        <h1><span>📬</span> Syndae Email Hub</h1>
         <div class="subtitle">Multi-Account Mailbox Connector & Real-Time IMAP IDLE Push</div>
       </div>
       <div>
@@ -297,7 +297,7 @@ export function renderMailboxDashboardHtml(accounts = [], stats = {}) {
 
     <div class="section-title">
       <span>Connected Mailboxes (${accounts.length})</span>
-      <a href="http://localhost:3000" target="_blank" style="font-size:0.8rem; color:var(--accent); text-decoration:none;">Open Styx UI &rarr;</a>
+      <a href="http://localhost:3000" target="_blank" style="font-size:0.8rem; color:var(--accent); text-decoration:none;">Open Syndae UI &rarr;</a>
     </div>
 
     <div class="accounts-grid" id="accountsList">
@@ -321,7 +321,7 @@ export function renderMailboxDashboardHtml(accounts = [], stats = {}) {
         <div class="tip-box">
           <strong>⚡ 2 Quick Steps for Gmail (Takes ~15 seconds):</strong><br>
           <strong>Step 1:</strong> In Gmail, verify IMAP is enabled: <a href="https://mail.google.com/mail/u/0/#settings/fwdandpop" target="_blank">Gmail Settings &rarr; Forwarding and POP/IMAP ↗</a> &bull; select <strong>Enable IMAP</strong> &bull; Save Changes.<br>
-          <strong>Step 2:</strong> Open <a href="https://myaccount.google.com/apppasswords" target="_blank">Google App Passwords ↗</a>, create one named <code>Styx</code>, and paste the 16 letters below.
+          <strong>Step 2:</strong> Open <a href="https://myaccount.google.com/apppasswords" target="_blank">Google App Passwords ↗</a>, create one named <code>Syndae</code>, and paste the 16 letters below.
         </div>
         <form onsubmit="handleDirectSubmit(event, 'gmail')">
           <label>Mailbox Identifier / Alias</label>
@@ -470,7 +470,7 @@ export function renderOAuthConfigHtml({ provider, accountId, redirectUri }) {
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Connect ${provider.toUpperCase()} - Styx Agent OS</title>
+  <title>Connect ${provider.toUpperCase()} - Syndae Agent OS</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 1rem; }
     .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 2rem; max-width: 560px; width: 100%; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }
@@ -489,7 +489,7 @@ export function renderOAuthConfigHtml({ provider, accountId, redirectUri }) {
 <body>
   <div class="card">
     <h2>Connect ${isGmail ? 'Google Gmail' : 'Microsoft Outlook'} (OAuth 2.0)</h2>
-    <p>To connect Styx using Modern Auth without storing static passwords, enter your OAuth App credentials from <a href="${consoleLink}" target="_blank" style="color:#38bdf8; text-decoration:underline;">${isGmail ? 'Google Cloud Console' : 'Azure Portal'} &nearr;</a></p>
+    <p>To connect Syndae using Modern Auth without storing static passwords, enter your OAuth App credentials from <a href="${consoleLink}" target="_blank" style="color:#38bdf8; text-decoration:underline;">${isGmail ? 'Google Cloud Console' : 'Azure Portal'} &nearr;</a></p>
 
     <div style="margin-bottom: 1rem;">
       <span style="font-size:0.8rem; color:#94a3b8; font-weight: 500;">1. Authorized Redirect URI (add to your OAuth Client in console):</span>
@@ -546,7 +546,7 @@ export function renderOAuthSuccessHtml({ account, email, provider }) {
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Connected - Styx Agent OS</title>
+  <title>Connected - Syndae Agent OS</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
     .card { background: #1e293b; border: 1px solid #10b981; border-radius: 12px; padding: 2.5rem; max-width: 480px; width: 90%; text-align: center; }
@@ -574,7 +574,7 @@ export function renderOAuthErrorHtml(errorMsg) {
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Connection Error - Styx</title>
+  <title>Connection Error - Syndae</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
     .card { background: #1e293b; border: 1px solid #ef4444; border-radius: 12px; padding: 2.5rem; max-width: 480px; width: 90%; text-align: center; }

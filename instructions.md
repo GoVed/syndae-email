@@ -1,7 +1,7 @@
 # Universal Email MCP Tool (IMAP & SMTP with Modern Auth)
 
 ## Overview
-The `email` tool enables Styx agents to read, search, draft, and send emails across multiple email accounts simultaneously using Modern Auth (OAuth 2.0 PKCE / SASL XOAUTH2) and open standards (IMAP + SMTP over TLS).
+The `email` tool enables Syndae agents to read, search, draft, and send emails across multiple email accounts simultaneously using Modern Auth (OAuth 2.0 PKCE / SASL XOAUTH2) and open standards (IMAP + SMTP over TLS).
 
 ## Key Features
 1. **Multi-Account Mailbox Architecture**:
@@ -14,9 +14,9 @@ The `email` tool enables Styx agents to read, search, draft, and send emails acr
    - Automatic background token rotation ensures continuous operation without re-prompting.
 3. **Concurrent Real-time IMAP IDLE Push**:
    - Maintains open sockets across all registered accounts.
-   - Inbound emails immediately trigger Styx (`POST /api/tools/trigger` with `protocol: "email"`), tagged with account mailbox metadata.
+   - Inbound emails immediately trigger Syndae (`POST /api/tools/trigger` with `protocol: "email"`), tagged with account mailbox metadata.
 4. **Deterministic Human-in-the-Loop Send Gating**:
-   - Outbound emails (`send_email`) and destructive modifications (`archive_or_mark_email`) require approval tickets in Styx.
+   - Outbound emails (`send_email`) and destructive modifications (`archive_or_mark_email`) require approval tickets in Syndae.
 
 ---
 

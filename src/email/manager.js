@@ -201,7 +201,7 @@ export class AccountManager {
     // If relay is active, attach listener for this new account immediately
     if (this.relay) {
       client.startIdleListener(email => {
-        this.relay.forwardEmailToStyx(email, id);
+        this.relay.forwardEmailToSyndae(email, id);
       });
     }
 

@@ -1,9 +1,9 @@
 services:
-  styx-email:
+  syndae-email:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: styx-email-connector
+    container_name: syndae-email-connector
     restart: unless-stopped
     ports:
       - "8771:8771"
@@ -27,8 +27,8 @@ services:
       - OUTLOOK_CLIENT_ID=${OUTLOOK_CLIENT_ID:-}
       - OUTLOOK_CLIENT_SECRET=${OUTLOOK_CLIENT_SECRET:-}
       - ENABLE_IDLE=${ENABLE_IDLE:-true}
-      - STYX_API_URL=http://host.docker.internal:3000
-      - STYX_ACCESS_KEY=${STYX_ACCESS_KEY:-styx-local-dev-key}
+      - SYNDAE_API_URL=http://host.docker.internal:3000
+      - SYNDAE_ACCESS_KEY=${SYNDAE_ACCESS_KEY:-syndae-local-dev-key}
       - LOG_LEVEL=info
     volumes:
       - ./data:/app/data
@@ -36,9 +36,9 @@ services:
       - "host.docker.internal:host-gateway"
     networks:
       - default
-      - styx_default
+      - syndae_default
 
 networks:
   default:
-  styx_default:
+  syndae_default:
     external: true

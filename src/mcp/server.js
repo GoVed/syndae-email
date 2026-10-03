@@ -5,7 +5,7 @@ import logger from '../utils/logger.js';
 import config from '../config.js';
 
 export const SERVER_INFO = {
-  name: 'styx-email-server',
+  name: 'syndae-email-server',
   version: '1.0.0',
 };
 
