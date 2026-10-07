@@ -32,6 +32,8 @@ services:
       - LOG_LEVEL=info
     volumes:
       - ./data:/app/data
+      - ./instructions.md:/app/instructions.md:ro
+      - ./src:/app/src:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:

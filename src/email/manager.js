@@ -10,6 +10,8 @@ export class AccountManager {
     this.storagePath = options.storagePath || path.resolve(config.rootDir, 'data/accounts.json');
     this.accounts = new Map(); // id -> EmailClient
     this.relay = null;
+    this.onNewEmail = null;
+    this._watchdogInterval = null;
   }
 
   /**
@@ -151,6 +153,7 @@ export class AccountManager {
    * Starts IMAP IDLE push listeners across all active accounts
    */
   async startAllIdleListeners(onNewEmail) {
+    this.onNewEmail = onNewEmail;
     for (const [id, client] of this.accounts.entries()) {
       if (client.connected && client.cfg.enableIdle) {
         try {
@@ -161,6 +164,36 @@ export class AccountManager {
           logger.warn({ id, err: err.message }, 'Failed to start IDLE for account');
         }
       }
+    }
+    this.startWatchdog();
+  }
+
+  startWatchdog() {
+    if (this._watchdogInterval) clearInterval(this._watchdogInterval);
+    this._watchdogInterval = setInterval(async () => {
+      for (const [id, client] of this.accounts.entries()) {
+        if (client.isConfigured() && (!client.connected || !client.idleActive)) {
+          logger.info({ id }, 'Watchdog detected inactive IMAP IDLE listener, triggering reconnect...');
+          if (this.onNewEmail) client.onNewEmailCallback = email => this.onNewEmail(email, id);
+          client.scheduleReconnect(1000);
+        } else if (client.connected && client.imap && client.imap.usable) {
+          try {
+            await client.imap.noop();
+          } catch (e) {
+            logger.warn({ id, err: e.message }, 'IMAP keep-alive NOOP ping failed, scheduling reconnect...');
+            client.connected = false;
+            client.idleActive = false;
+            client.scheduleReconnect(1000);
+          }
+        }
+      }
+    }, 45000);
+  }
+
+  stopWatchdog() {
+    if (this._watchdogInterval) {
+      clearInterval(this._watchdogInterval);
+      this._watchdogInterval = null;
     }
   }
 

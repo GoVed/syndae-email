@@ -39,6 +39,11 @@ export class EmailClient {
     this.connected = false;
     this.idleActive = false;
     this.statusListeners = [];
+    this.onNewEmailCallback = null;
+    this.lastSeenUid = 0;
+    this._reconnecting = false;
+    this._reconnectTimer = null;
+    this._reconnectAttempts = 0;
   }
 
   getSummary() {
@@ -109,13 +114,19 @@ export class EmailClient {
       });
 
       this.imap.on('error', err => {
-        logger.error({ err: err.message }, 'IMAP connection error');
+        logger.error({ id: this.id, err: err.message }, 'IMAP connection error');
+        if (this.connected) {
+          this.connected = false;
+          this.idleActive = false;
+          this.scheduleReconnect(3000);
+        }
       });
 
       this.imap.on('close', () => {
         this.connected = false;
         this.idleActive = false;
-        logger.info('IMAP connection closed');
+        logger.info({ id: this.id }, 'IMAP connection closed');
+        this.scheduleReconnect(3000);
       });
 
       await this.imap.connect();
@@ -164,7 +175,47 @@ export class EmailClient {
     }
   }
 
+  scheduleReconnect(delayMs = 3000) {
+    if (this._reconnecting || !this.isConfigured()) return;
+    this._reconnecting = true;
+
+    if (this._reconnectTimer) {
+      clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = null;
+    }
+
+    this._reconnectAttempts = (this._reconnectAttempts || 0) + 1;
+    const actualDelay = Math.min(delayMs * Math.min(this._reconnectAttempts, 4), 30000);
+
+    logger.info(
+      { id: this.id, attempt: this._reconnectAttempts, delayMs: actualDelay },
+      `Scheduling IMAP reconnect in ${actualDelay}ms...`
+    );
+
+    this._reconnectTimer = setTimeout(async () => {
+      try {
+        logger.info({ id: this.id, attempt: this._reconnectAttempts }, 'Attempting IMAP reconnection...');
+        await this.connect();
+        this._reconnectAttempts = 0;
+        this._reconnecting = false;
+        logger.info({ id: this.id }, 'IMAP reconnected successfully! Resuming push listener...');
+        if (this.onNewEmailCallback) {
+          await this.startIdleListener(this.onNewEmailCallback);
+        }
+      } catch (err) {
+        logger.warn({ id: this.id, err: err.message }, 'IMAP reconnect attempt failed');
+        this._reconnecting = false;
+        this.scheduleReconnect(actualDelay);
+      }
+    }, actualDelay);
+  }
+
   async disconnect() {
+    if (this._reconnectTimer) {
+      clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = null;
+    }
+    this._reconnecting = false;
     try {
       if (this.imap) {
         this.imap.removeAllListeners('exists');
@@ -395,10 +446,10 @@ export class EmailClient {
 
   async startIdleListener(onNewEmail) {
     if (!this.cfg.enableIdle || !this.isConfigured()) return;
+    this.onNewEmailCallback = onNewEmail;
     await this.ensureConnected();
 
     try {
-      // Remove any previously registered exists listener to prevent duplication
       this.imap.removeAllListeners('exists');
 
       this.imap.on('exists', async data => {
@@ -406,28 +457,61 @@ export class EmailClient {
           if (data.prevCount !== undefined && data.count <= data.prevCount) {
             return;
           }
-          logger.info({ newCount: data.count, prevCount: data.prevCount }, 'New email notification received via IMAP IDLE');
-          // Fetch the latest incoming message
-          const latest = await this.listEmails({ folder: 'INBOX', limit: 1 });
-          if (latest.length > 0) {
-            const emailDetails = await this.readEmail({ uid: latest[0].uid, folder: 'INBOX', markAsRead: false });
+          const batchCount = data.prevCount !== undefined ? Math.max(1, data.count - data.prevCount) : 1;
+          logger.info(
+            { id: this.id, newCount: data.count, prevCount: data.prevCount, batch: batchCount },
+            'New email notification received via IMAP IDLE'
+          );
+
+          // Fetch recent incoming messages (up to batchCount, max 10)
+          const limit = Math.min(batchCount, 10);
+          const latest = await this.listEmails({ folder: 'INBOX', limit });
+          latest.sort((a, b) => a.uid - b.uid);
+
+          for (const item of latest) {
+            if (this.lastSeenUid && item.uid <= this.lastSeenUid) {
+              continue;
+            }
+            this.lastSeenUid = Math.max(this.lastSeenUid, item.uid);
+            const emailDetails = await this.readEmail({ uid: item.uid, folder: 'INBOX', markAsRead: false });
             if (typeof onNewEmail === 'function') {
               onNewEmail(emailDetails);
             }
           }
         } catch (e) {
-          logger.error({ err: e.message }, 'Error handling IMAP IDLE exists event');
+          logger.error({ id: this.id, err: e.message }, 'Error handling IMAP IDLE exists event');
         }
       });
 
       // Opening INBOX puts ImapFlow in SELECTED state, allowing its built-in auto-IDLE
-      // to run concurrently while releasing locks so RPC queries do not deadlock
       await this.imap.mailboxOpen('INBOX');
       this.idleActive = true;
-      logger.info('IMAP IDLE push listener active on INBOX');
+      logger.info({ id: this.id }, 'IMAP IDLE push listener active on INBOX');
+
+      // Sync recent unread emails received while offline / reconnected
+      if (!this.lastSeenUid) {
+        const initial = await this.listEmails({ folder: 'INBOX', limit: 1 }).catch(() => []);
+        if (initial.length > 0) {
+          this.lastSeenUid = initial[0].uid;
+        }
+      } else {
+        const catchup = await this.listEmails({ folder: 'INBOX', limit: 10 }).catch(() => []);
+        catchup.sort((a, b) => a.uid - b.uid);
+        for (const item of catchup) {
+          if (item.uid > this.lastSeenUid) {
+            this.lastSeenUid = item.uid;
+            logger.info({ id: this.id, uid: item.uid, subject: item.subject }, 'Relaying email received while disconnected');
+            const emailDetails = await this.readEmail({ uid: item.uid, folder: 'INBOX', markAsRead: false });
+            if (typeof onNewEmail === 'function') {
+              onNewEmail(emailDetails);
+            }
+          }
+        }
+      }
     } catch (err) {
       this.idleActive = false;
-      logger.warn({ err: err.message }, 'Failed to start IMAP IDLE listener');
+      logger.warn({ id: this.id, err: err.message }, 'Failed to start IMAP IDLE listener');
+      this.scheduleReconnect(5000);
     }
   }
 }

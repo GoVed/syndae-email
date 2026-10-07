@@ -307,6 +307,7 @@ export async function startHttpServer(port = config.httpPort, host = config.http
 
   const shutdown = async () => {
     logger.info('Shutting down Syndae Email Daemon...');
+    accountManager.stopWatchdog();
     for (const client of accountManager.accounts.values()) {
       await client.disconnect().catch(() => {});
     }
