@@ -57,9 +57,11 @@ EMAIL_PASS=xxxx xxxx xxxx xxxx
 
 ## Available MCP Tools
 - **`list_accounts`** (LOW / Autonomous): List all configured mailboxes, providers, and live connection status.
-- **`list_emails`** (LOW / Autonomous): Fetch recent emails from a specific account or aggregated across all accounts.
-- **`read_email`** (LOW / Autonomous): Read full email body and attachment summaries with compressed promotional links.
+- **`list_folders`** (LOW / Autonomous): List all available mailbox folders/labels (e.g. INBOX, Sent, Drafts, Trash, Archive, custom folders) and their exact paths for an email account.
+- **`list_emails`** (LOW / Autonomous): Fetch recent emails from a specific account or aggregated across all accounts. Supports any folder/alias (e.g. `folder: "Sent"`, `folder: "Drafts"`).
+- **`read_email`** (LOW / Autonomous): Read full email body and attachment summaries with compressed promotional links. Automatically reads from `Sent` if a sent email UID is specified.
 - **`get_email_link`** (LOW / Autonomous): Retrieve the full destination URL for a shortened promotional link on demand.
-- **`search_emails`** (LOW / Autonomous): Full-text search across subject, body, and sender.
+- **`search_emails`** (LOW / Autonomous): Full-text search across subject, body, and sender in any folder.
 - **`send_email`** (HIGH / Require Approval): Dispatch outbound email via SMTP with thread headers.
 - **`archive_or_mark_email`** (MEDIUM / Require Approval): Star, read/unread, move, or trash emails.
+

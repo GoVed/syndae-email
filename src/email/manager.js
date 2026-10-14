@@ -279,6 +279,18 @@ export class AccountManager {
   }
 
   /**
+   * Lists mailbox folders for an account
+   */
+  async listFolders({ account } = {}) {
+    if (account) {
+      const client = this.getAccount(account);
+      return await client.listFolders();
+    }
+    const client = this.getAccount();
+    return await client.listFolders();
+  }
+
+  /**
    * Lists summary of all active accounts
    */
   listAccounts() {

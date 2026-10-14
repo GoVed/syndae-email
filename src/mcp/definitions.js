@@ -10,8 +10,23 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
+    name: 'list_folders',
+    description: 'List all available mailbox folders/labels (e.g. INBOX, Sent, Drafts, Trash, Archive, custom folders) and their exact paths for an email account.',
+    risk_level: 'LOW',
+    policy: 'AUTONOMOUS',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        account: {
+          type: 'string',
+          description: 'Specific email account ID to list folders for (defaults to primary account)',
+        },
+      },
+    },
+  },
+  {
     name: 'list_emails',
-    description: 'Fetch a list of recent emails from the mailbox with envelope headers, read status, and attachment flags.',
+    description: 'Fetch a list of recent emails from the mailbox with envelope headers, read status, and attachment flags. Supports any folder/alias (e.g. INBOX, Sent, Drafts, Trash, Archive).',
     risk_level: 'LOW',
     policy: 'AUTONOMOUS',
     inputSchema: {
@@ -23,7 +38,7 @@ export const TOOL_DEFINITIONS = [
         },
         folder: {
           type: 'string',
-          description: 'Mailbox folder to list from (default: INBOX)',
+          description: 'Mailbox folder to list from (e.g. INBOX, Sent, Drafts, Trash, Archive, or path from list_folders; default: INBOX)',
           default: 'INBOX',
         },
         limit: {
@@ -45,7 +60,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'read_email',
-    description: 'Retrieve full email details including complete text body, sender/recipient metadata, and attachment summaries by message UID.',
+    description: 'Retrieve full email details including complete text body, sender/recipient metadata, and attachment summaries by message UID. Supports reading from INBOX, Sent, and all folders.',
     risk_level: 'LOW',
     policy: 'AUTONOMOUS',
     inputSchema: {
@@ -61,7 +76,7 @@ export const TOOL_DEFINITIONS = [
         },
         folder: {
           type: 'string',
-          description: 'Mailbox folder containing the email (default: INBOX)',
+          description: 'Mailbox folder containing the email (e.g. INBOX, Sent, Drafts, Trash; default: INBOX). Note: sent emails can be read by setting folder: "Sent" or by their UID.',
           default: 'INBOX',
         },
         mark_as_read: {

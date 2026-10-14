@@ -11,10 +11,11 @@ console.log('--- Running Syndae Multi-Account & Modern Auth Email Connector Test
 
 // Test 1: Tool definitions and safety policies
 console.log('Test 1: Verify MCP tool definitions, multi-account params, and safety policies...');
-assert.equal(TOOL_DEFINITIONS.length, 7, 'Must expose exactly 7 MCP tools');
+assert.equal(TOOL_DEFINITIONS.length, 8, 'Must expose exactly 8 MCP tools');
 
 const toolNames = TOOL_DEFINITIONS.map(t => t.name);
 assert(toolNames.includes('list_accounts'), 'Must include list_accounts');
+assert(toolNames.includes('list_folders'), 'Must include list_folders');
 assert(toolNames.includes('list_emails'), 'Must include list_emails');
 assert(toolNames.includes('read_email'), 'Must include read_email');
 assert(toolNames.includes('get_email_link'), 'Must include get_email_link');
@@ -84,6 +85,10 @@ const mockWorkClient = {
   idleActive: true,
   authType: 'oauth2',
   getSummary: () => ({ id: 'work', user: 'de*******@work.com', provider: 'outlook', connected: true, authType: 'oauth2' }),
+  listFolders: async () => [
+    { path: 'INBOX', name: 'INBOX', type: 'inbox' },
+    { path: 'Sent Items', name: 'Sent Items', type: 'sent', specialUse: '\\Sent' },
+  ],
   listEmails: async () => [
     { uid: 201, subject: 'Q3 Product Roadmap', date: '2026-09-30T16:00:00Z', account: 'work' }
   ],
@@ -106,6 +111,11 @@ const mockPersonalClient = {
   idleActive: true,
   authType: 'oauth2',
   getSummary: () => ({ id: 'personal', user: 'us**@gmail.com', provider: 'gmail', connected: true, authType: 'oauth2' }),
+  listFolders: async () => [
+    { path: 'INBOX', name: 'INBOX', type: 'inbox' },
+    { path: '[Gmail]/Sent Mail', name: 'Sent Mail', type: 'sent', specialUse: '\\Sent' },
+    { path: '[Gmail]/Drafts', name: 'Drafts', type: 'drafts', specialUse: '\\Drafts' },
+  ],
   listEmails: async () => [
     { uid: 101, subject: 'Dentist Appointment', date: '2026-09-30T17:00:00Z', account: 'personal' }
   ],
@@ -170,7 +180,7 @@ const listToolsResp = await server.handleJsonRpc({
   id: 2,
   method: 'tools/list',
 });
-assert.equal(listToolsResp.result.tools.length, 7);
+assert.equal(listToolsResp.result.tools.length, 8);
 
 // Test tools/call list_accounts
 const callListAccountsResp = await server.handleJsonRpc({
@@ -182,6 +192,17 @@ const callListAccountsResp = await server.handleJsonRpc({
 const accountsData = JSON.parse(callListAccountsResp.result.content[0].text);
 assert.equal(accountsData.length, 2);
 assert.equal(accountsData[0].id, 'work');
+
+// Test tools/call list_folders
+const callListFoldersResp = await server.handleJsonRpc({
+  jsonrpc: '2.0',
+  id: 35,
+  method: 'tools/call',
+  params: { name: 'list_folders', arguments: { account: 'personal' } }
+});
+const foldersData = JSON.parse(callListFoldersResp.result.content[0].text);
+assert.equal(foldersData.length, 3);
+assert.equal(foldersData[1].path, '[Gmail]/Sent Mail');
 
 // Test tools/call list_emails with specific account
 const callListResp = await server.handleJsonRpc({
@@ -338,5 +359,34 @@ assert(shortRes.text.includes('[Link #1: promo.store.com]'));
 assert(shortRes.text.includes('https://syndae.org'));
 assert.equal(shortRes.links['1'], 'https://promo.store.com/trk?utm_source=email&token=1234567890abcdef1234567890');
 console.log('✓ urlShortener compression and deduplication verified.');
+
+// Test 9: Verify EmailClient folder resolution & semantic aliases
+console.log('Test 9: Verify EmailClient folder resolution & semantic aliases...');
+const { EmailClient } = await import('../src/email/client.js');
+const testClient = new EmailClient({ user: 'tester@gmail.com', pass: 'secret' });
+testClient._cachedMailboxes = [
+  { path: 'INBOX', name: 'INBOX', type: 'inbox' },
+  { path: '[Gmail]/Sent Mail', name: 'Sent Mail', type: 'sent', specialUse: '\\Sent' },
+  { path: '[Gmail]/Drafts', name: 'Drafts', type: 'drafts', specialUse: '\\Drafts' },
+  { path: '[Gmail]/Trash', name: 'Trash', type: 'trash', specialUse: '\\Trash' },
+  { path: '[Gmail]/Spam', name: 'Spam', type: 'spam', specialUse: '\\Junk' },
+  { path: '[Gmail]/All Mail', name: 'All Mail', type: 'archive', specialUse: '\\All' },
+  { path: 'Work', name: 'Work', type: 'custom' },
+];
+testClient._cachedMailboxesTime = Date.now();
+
+assert.equal(await testClient.resolveFolder('Sent'), '[Gmail]/Sent Mail');
+assert.equal(await testClient.resolveFolder('sent'), '[Gmail]/Sent Mail');
+assert.equal(await testClient.resolveFolder('sent mail'), '[Gmail]/Sent Mail');
+assert.equal(await testClient.resolveFolder('sent items'), '[Gmail]/Sent Mail');
+assert.equal(await testClient.resolveFolder('drafts'), '[Gmail]/Drafts');
+assert.equal(await testClient.resolveFolder('trash'), '[Gmail]/Trash');
+assert.equal(await testClient.resolveFolder('spam'), '[Gmail]/Spam');
+assert.equal(await testClient.resolveFolder('all mail'), '[Gmail]/All Mail');
+assert.equal(await testClient.resolveFolder('archive'), '[Gmail]/All Mail');
+assert.equal(await testClient.resolveFolder('INBOX'), 'INBOX');
+assert.equal(await testClient.resolveFolder('Work'), 'Work');
+assert.equal(await testClient.resolveFolder(''), 'INBOX');
+console.log('✓ EmailClient folder resolution & semantic aliases verified.');
 
 console.log('\n--- ALL MULTI-ACCOUNT & MODERN AUTH EMAIL TESTS PASSED ---');

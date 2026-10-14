@@ -27,6 +27,7 @@ export class EmailMcpServer {
             idleActive: Boolean(client.idleActive),
           }
         ],
+        listFolders: (opts) => client.listFolders ? client.listFolders(opts) : [],
         listEmails: (opts) => client.listEmails(opts),
         readEmail: (opts) => client.readEmail(opts),
         getEmailLink: (opts) => client.getEmailLink(opts),
@@ -141,6 +142,12 @@ export class EmailMcpServer {
     switch (name) {
       case 'list_accounts': {
         return await this.manager.listAccounts();
+      }
+
+      case 'list_folders': {
+        return await this.manager.listFolders({
+          account: args.account || null,
+        });
       }
 
       case 'list_emails': {

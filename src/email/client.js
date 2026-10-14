@@ -43,6 +43,8 @@ export class EmailClient {
     this.onNewEmailCallback = null;
     this.lastSeenUid = 0;
     this._linkCache = new Map();
+    this._cachedMailboxes = null;
+    this._cachedMailboxesTime = 0;
     this._reconnecting = false;
     this._reconnectTimer = null;
     this._reconnectAttempts = 0;
@@ -228,6 +230,8 @@ export class EmailClient {
     } finally {
       this.connected = false;
       this.idleActive = false;
+      this._cachedMailboxes = null;
+      this._cachedMailboxesTime = 0;
     }
   }
 
@@ -237,10 +241,136 @@ export class EmailClient {
     }
   }
 
+  async listFolders() {
+    await this.ensureConnected();
+    const mailboxes = await this.imap.list();
+    if (!Array.isArray(mailboxes)) return [];
+
+    const result = mailboxes.map(box => {
+      let folderType = 'custom';
+      const specialUse = box.specialUse || '';
+      const pathLower = (box.path || '').toLowerCase();
+      const nameLower = (box.name || '').toLowerCase();
+
+      if (specialUse === '\\Inbox' || pathLower === 'inbox' || nameLower === 'inbox') {
+        folderType = 'inbox';
+      } else if (specialUse === '\\Sent' || pathLower.includes('sent') || nameLower.includes('sent')) {
+        folderType = 'sent';
+      } else if (specialUse === '\\Drafts' || pathLower.includes('draft') || nameLower.includes('draft')) {
+        folderType = 'drafts';
+      } else if (specialUse === '\\Trash' || pathLower.includes('trash') || nameLower.includes('trash') || nameLower.includes('bin')) {
+        folderType = 'trash';
+      } else if (specialUse === '\\Junk' || pathLower.includes('spam') || nameLower.includes('spam') || nameLower.includes('junk')) {
+        folderType = 'spam';
+      } else if (specialUse === '\\All' || specialUse === '\\Archive' || pathLower.includes('all mail') || pathLower.includes('archive')) {
+        folderType = 'archive';
+      } else if (specialUse === '\\Flagged' || nameLower.includes('starred')) {
+        folderType = 'starred';
+      }
+
+      return {
+        path: box.path,
+        name: box.name,
+        specialUse: specialUse || undefined,
+        type: folderType,
+      };
+    });
+
+    this._cachedMailboxes = result;
+    this._cachedMailboxesTime = Date.now();
+    return result;
+  }
+
+  async resolveFolder(requestedFolder) {
+    if (!requestedFolder || typeof requestedFolder !== 'string' || !requestedFolder.trim()) {
+      return 'INBOX';
+    }
+
+    const raw = requestedFolder.trim();
+    if (raw.toUpperCase() === 'INBOX') {
+      return 'INBOX';
+    }
+
+    let folders = this._cachedMailboxes;
+    if (!folders || !this._cachedMailboxesTime || (Date.now() - this._cachedMailboxesTime > 300000)) {
+      folders = await this.listFolders().catch(() => []);
+    }
+
+    if (!folders || folders.length === 0) {
+      return raw;
+    }
+
+    const lower = raw.toLowerCase();
+
+    // 1. Direct path match (case-insensitive)
+    const exactPath = folders.find(f => f.path.toLowerCase() === lower);
+    if (exactPath) return exactPath.path;
+
+    // 2. Direct name match (case-insensitive)
+    const exactName = folders.find(f => f.name.toLowerCase() === lower);
+    if (exactName) return exactName.path;
+
+    // 3. Semantic Alias Matching
+    // Sent folder aliases
+    if (['sent', 'sent mail', 'sent items', 'sent messages', 'outbox'].includes(lower)) {
+      const sentBox = folders.find(f => f.type === 'sent') ||
+                      folders.find(f => f.specialUse === '\\Sent') ||
+                      folders.find(f => f.path.toLowerCase().includes('sent') || f.name.toLowerCase().includes('sent'));
+      if (sentBox) return sentBox.path;
+    }
+
+    // Drafts aliases
+    if (['draft', 'drafts'].includes(lower)) {
+      const draftBox = folders.find(f => f.type === 'drafts') ||
+                       folders.find(f => f.specialUse === '\\Drafts') ||
+                       folders.find(f => f.path.toLowerCase().includes('draft') || f.name.toLowerCase().includes('draft'));
+      if (draftBox) return draftBox.path;
+    }
+
+    // Trash / Deleted aliases
+    if (['trash', 'bin', 'deleted', 'deleted items', 'recycle bin'].includes(lower)) {
+      const trashBox = folders.find(f => f.type === 'trash') ||
+                       folders.find(f => f.specialUse === '\\Trash') ||
+                       folders.find(f => f.path.toLowerCase().includes('trash') || f.name.toLowerCase().includes('trash'));
+      if (trashBox) return trashBox.path;
+    }
+
+    // Spam / Junk aliases
+    if (['spam', 'junk', 'bulk'].includes(lower)) {
+      const spamBox = folders.find(f => f.type === 'spam') ||
+                      folders.find(f => f.specialUse === '\\Junk') ||
+                      folders.find(f => f.path.toLowerCase().includes('spam') || f.name.toLowerCase().includes('junk'));
+      if (spamBox) return spamBox.path;
+    }
+
+    // Archive / All mail aliases
+    if (['archive', 'archives', 'all', 'all mail'].includes(lower)) {
+      const archBox = folders.find(f => f.type === 'archive') ||
+                      folders.find(f => f.specialUse === '\\All' || f.specialUse === '\\Archive') ||
+                      folders.find(f => f.path.toLowerCase().includes('all') || f.name.toLowerCase().includes('all'));
+      if (archBox) return archBox.path;
+    }
+
+    // Starred / Flagged
+    if (['starred', 'flagged'].includes(lower)) {
+      const starBox = folders.find(f => f.type === 'starred') ||
+                      folders.find(f => f.specialUse === '\\Flagged') ||
+                      folders.find(f => f.name.toLowerCase().includes('starred'));
+      if (starBox) return starBox.path;
+    }
+
+    // 4. Substring partial match
+    const partialMatch = folders.find(f => f.path.toLowerCase().includes(lower) || f.name.toLowerCase().includes(lower));
+    if (partialMatch) return partialMatch.path;
+
+    return raw;
+  }
+
   async listEmails({ folder = 'INBOX', limit = 20, unreadOnly = false, since = null } = {}) {
     await this.ensureConnected();
 
-    const lock = await this.imap.getMailboxLock(folder);
+    const resolvedFolder = await this.resolveFolder(folder);
+    const lock = await this.imap.getMailboxLock(resolvedFolder);
     try {
       const searchCriteria = {};
       if (unreadOnly) searchCriteria.seen = false;
@@ -276,6 +406,7 @@ export class EmailClient {
         messages.push({
           uid: msg.uid,
           account: this.id,
+          folder: resolvedFolder,
           messageId: msg.envelope?.messageId || `uid-${msg.uid}`,
           from: fromAddr ? { name: fromAddr.name, address: fromAddr.address || `${fromAddr.mailbox}@${fromAddr.host}` } : null,
           to: toAddrs,
@@ -296,9 +427,35 @@ export class EmailClient {
   async readEmail({ uid, folder = 'INBOX', markAsRead = true, shortenLinks = true, includeFullLinks = false } = {}) {
     await this.ensureConnected();
 
-    const lock = await this.imap.getMailboxLock(folder);
+    let resolvedFolder = await this.resolveFolder(folder);
+    let lock = await this.imap.getMailboxLock(resolvedFolder);
+    let content = null;
+    let actualFolder = resolvedFolder;
+
     try {
-      const { content } = await this.imap.download(uid, undefined, { uid: true });
+      const downloadRes = await this.imap.download(uid, undefined, { uid: true });
+      content = downloadRes?.content;
+
+      // If not found in requested folder and the caller used default INBOX:
+      // check if the email UID is in the Sent mailbox
+      if (!content && (!folder || folder.trim().toUpperCase() === 'INBOX')) {
+        const sentFolder = await this.resolveFolder('Sent');
+        if (sentFolder && sentFolder !== resolvedFolder) {
+          lock.release();
+          lock = await this.imap.getMailboxLock(sentFolder);
+          const sentDownload = await this.imap.download(uid, undefined, { uid: true });
+          if (sentDownload?.content) {
+            content = sentDownload.content;
+            actualFolder = sentFolder;
+            logger.info({ uid, sentFolder }, 'UID not in INBOX; located and read from Sent mailbox');
+          }
+        }
+      }
+
+      if (!content) {
+        throw new Error(`Email with UID ${uid} was not found in folder "${resolvedFolder}". Tip: To read sent emails, specify folder: "Sent" or use list_emails({ folder: "Sent" }) to find recent message UIDs.`);
+      }
+
       const parsed = await simpleParser(content);
 
       if (markAsRead) {
@@ -330,6 +487,7 @@ export class EmailClient {
       return {
         uid,
         account: this.id,
+        folder: actualFolder,
         messageId: parsed.messageId || `uid-${uid}`,
         subject: parsed.subject || '(No Subject)',
         from: parsed.from?.value?.[0] ? { name: parsed.from.value[0].name, address: parsed.from.value[0].address } : null,
@@ -374,7 +532,8 @@ export class EmailClient {
   async searchEmails({ query, folder = 'INBOX', limit = 20 } = {}) {
     await this.ensureConnected();
 
-    const lock = await this.imap.getMailboxLock(folder);
+    const resolvedFolder = await this.resolveFolder(folder);
+    const lock = await this.imap.getMailboxLock(resolvedFolder);
     try {
       // Match query across subject or body or from
       const searchCriteria = {
@@ -404,6 +563,7 @@ export class EmailClient {
         messages.push({
           uid: msg.uid,
           account: this.id,
+          folder: resolvedFolder,
           messageId: msg.envelope?.messageId || `uid-${msg.uid}`,
           from: fromAddr ? { name: fromAddr.name, address: fromAddr.address || `${fromAddr.mailbox}@${fromAddr.host}` } : null,
           subject: msg.envelope?.subject || '(No Subject)',
@@ -454,28 +614,30 @@ export class EmailClient {
   async archiveOrMarkEmail({ uid, action, folder = 'INBOX', targetFolder } = {}) {
     await this.ensureConnected();
 
-    const lock = await this.imap.getMailboxLock(folder);
+    const resolvedFolder = await this.resolveFolder(folder);
+    const resolvedTarget = targetFolder ? await this.resolveFolder(targetFolder) : null;
+    const lock = await this.imap.getMailboxLock(resolvedFolder);
     try {
       switch (action) {
         case 'read':
           await this.imap.messageFlagsAdd(uid, ['\\Seen'], { uid: true });
-          return { success: true, action: 'marked_as_read', uid };
+          return { success: true, action: 'marked_as_read', uid, folder: resolvedFolder };
         case 'unread':
           await this.imap.messageFlagsRemove(uid, ['\\Seen'], { uid: true });
-          return { success: true, action: 'marked_as_unread', uid };
+          return { success: true, action: 'marked_as_unread', uid, folder: resolvedFolder };
         case 'flag':
           await this.imap.messageFlagsAdd(uid, ['\\Flagged'], { uid: true });
-          return { success: true, action: 'flagged', uid };
+          return { success: true, action: 'flagged', uid, folder: resolvedFolder };
         case 'unflag':
           await this.imap.messageFlagsRemove(uid, ['\\Flagged'], { uid: true });
-          return { success: true, action: 'unflagged', uid };
+          return { success: true, action: 'unflagged', uid, folder: resolvedFolder };
         case 'move':
-          if (!targetFolder) throw new Error('targetFolder parameter required for move action');
-          await this.imap.messageMove(uid, targetFolder, { uid: true });
-          return { success: true, action: `moved_to_${targetFolder}`, uid };
+          if (!resolvedTarget) throw new Error('targetFolder parameter required for move action');
+          await this.imap.messageMove(uid, resolvedTarget, { uid: true });
+          return { success: true, action: `moved_to_${resolvedTarget}`, uid, fromFolder: resolvedFolder, targetFolder: resolvedTarget };
         case 'delete':
           await this.imap.messageDelete(uid, { uid: true });
-          return { success: true, action: 'deleted', uid };
+          return { success: true, action: 'deleted', uid, folder: resolvedFolder };
         default:
           throw new Error(`Unknown action: ${action}. Expected read, unread, flag, unflag, move, or delete.`);
       }
