@@ -342,9 +342,14 @@ export class AccountManager {
     return allMessages.slice(0, limit);
   }
 
-  async readEmail({ account, uid, folder = 'INBOX', markAsRead = true } = {}) {
+  async readEmail({ account, uid, folder = 'INBOX', markAsRead = true, shortenLinks = true, includeFullLinks = false } = {}) {
     const client = this.getAccount(account);
-    return await client.readEmail({ uid, folder, markAsRead });
+    return await client.readEmail({ uid, folder, markAsRead, shortenLinks, includeFullLinks });
+  }
+
+  async getEmailLink({ account, uid, linkId = null } = {}) {
+    const client = this.getAccount(account);
+    return await client.getEmailLink({ uid, linkId });
   }
 
   async sendEmail({ account, to, subject, body, html, cc, bcc, replyTo, inReplyTo, references } = {}) {

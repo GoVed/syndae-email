@@ -69,6 +69,35 @@ export const TOOL_DEFINITIONS = [
           description: 'Whether to mark the email as read upon viewing (default: true)',
           default: true,
         },
+        include_full_links: {
+          type: 'boolean',
+          description: 'Whether to include the full unshortened links dictionary in response (default: false to preserve context window). Prefer get_email_link for on-demand link retrieval.',
+          default: false,
+        },
+      },
+      required: ['uid'],
+    },
+  },
+  {
+    name: 'get_email_link',
+    description: 'Retrieve the original destination URL for a shortened promotional/tracking link from an email (e.g. Link #1), or all links for the message when required.',
+    risk_level: 'LOW',
+    policy: 'AUTONOMOUS',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        account: {
+          type: 'string',
+          description: 'Specific email account ID containing the message (defaults to primary/first account)',
+        },
+        uid: {
+          type: 'number',
+          description: 'The unique message UID to inspect links for',
+        },
+        link_id: {
+          type: 'string',
+          description: 'Specific link ID to retrieve (e.g. "1", "2"). Omit to retrieve a dictionary of all links for this message.',
+        },
       },
       required: ['uid'],
     },

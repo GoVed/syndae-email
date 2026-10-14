@@ -96,6 +96,9 @@ export const config = {
   // Daemon HTTP Server
   httpPort: parseInt(process.env.HTTP_PORT || '8771', 10),
   httpHost: process.env.HTTP_HOST || '0.0.0.0',
+  get publicUrl() {
+    return (process.env.PUBLIC_URL || `http://localhost:${this.httpPort}`).replace(/\/$/, '');
+  },
   logLevel: process.env.LOG_LEVEL || 'info',
   rootDir: path.resolve(__dirname, '..'),
 

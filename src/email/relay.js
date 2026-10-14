@@ -1,5 +1,6 @@
 import logger from '../utils/logger.js';
 import config from '../config.js';
+import { shortenEmailLinks } from '../utils/urlShortener.js';
 
 export class SyndaeEmailRelay {
   constructor(target, options = {}) {
@@ -61,6 +62,11 @@ export class SyndaeEmailRelay {
     const acc = accountId || email.account || 'primary';
     const accountTag = acc ? `[${acc}] ` : '';
 
+    const rawText = email.text || '';
+    const uid = email.uid !== undefined && email.uid !== null ? email.uid : 0;
+    const shortened = shortenEmailLinks(rawText, { account: acc, uid });
+    const cleanText = shortened.text;
+
     const requestBody = {
       protocol: 'email',
       event_type: 'new_email',
@@ -72,8 +78,9 @@ export class SyndaeEmailRelay {
         sender: senderEmail,
         sender_name: senderName,
         subject: email.subject || '(No Subject)',
-        message: `Account: ${acc}\nSubject: ${email.subject || '(No Subject)'}\nFrom: ${senderName} <${senderEmail}>\nDate: ${email.date}\n\n${email.text || ''}`.trim(),
-        text: email.text || '',
+        message: `Account: ${acc}\nSubject: ${email.subject || '(No Subject)'}\nFrom: ${senderName} <${senderEmail}>\nDate: ${email.date}\n\n${cleanText}`.trim(),
+        text: cleanText,
+        links_count: shortened.count,
         message_id: email.messageId,
         date: email.date,
         in_reply_to: email.inReplyTo || null,

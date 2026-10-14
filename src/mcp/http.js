@@ -128,6 +128,22 @@ export function createHttpApp(options = {}) {
     res.json({ accounts: accountManager.listAccounts() });
   });
 
+  // Shortened Link Redirection & Access Endpoint (Fast 302 Redirect to destination)
+  app.get('/links/:account/:uid/:link_id', async (req, res) => {
+    try {
+      const { account, uid, link_id } = req.params;
+      const parsedUid = parseInt(uid, 10);
+      const url = await accountManager.getEmailLink({ account, uid: parsedUid, linkId: link_id });
+      if (url && typeof url === 'string') {
+        return res.redirect(url);
+      }
+      return res.status(404).send(`<h3>Link #${link_id} not found for email UID ${uid}</h3>`);
+    } catch (err) {
+      logger.error({ err: err.message, params: req.params }, 'Error resolving shortened email link');
+      return res.status(500).send(`<h3>Error resolving link: ${err.message}</h3>`);
+    }
+  });
+
   // Direct Account Addition (App Passwords or Static Keys - 10-Second Setup)
   app.post('/accounts/add', async (req, res) => {
     try {

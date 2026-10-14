@@ -29,6 +29,7 @@ export class EmailMcpServer {
         ],
         listEmails: (opts) => client.listEmails(opts),
         readEmail: (opts) => client.readEmail(opts),
+        getEmailLink: (opts) => client.getEmailLink(opts),
         searchEmails: (opts) => client.searchEmails(opts),
         sendEmail: (opts) => client.sendEmail({
           to: opts.to,
@@ -161,6 +162,19 @@ export class EmailMcpServer {
           uid: parseInt(args.uid, 10),
           folder: args.folder || 'INBOX',
           markAsRead: args.mark_as_read !== false,
+          shortenLinks: args.shorten_links !== false,
+          includeFullLinks: Boolean(args.include_full_links),
+        });
+      }
+
+      case 'get_email_link': {
+        if (args.uid === undefined || args.uid === null) {
+          throw new Error('Missing required argument: uid');
+        }
+        return await this.manager.getEmailLink({
+          account: args.account || null,
+          uid: parseInt(args.uid, 10),
+          linkId: args.link_id ? String(args.link_id) : null,
         });
       }
 

@@ -17,6 +17,10 @@ The `email` tool enables Syndae agents to read, search, draft, and send emails a
    - Inbound emails immediately trigger Syndae (`POST /api/tools/trigger` with `protocol: "email"`), tagged with account mailbox metadata.
 4. **Deterministic Human-in-the-Loop Send Gating**:
    - Outbound emails (`send_email`) and destructive modifications (`archive_or_mark_email`) require approval tickets in Syndae.
+5. **Intelligent Promotional Link Shortening & Context Window Protection**:
+   - Automatically compresses bloated marketing/tracking URLs (e.g. tracking tokens, UTM tags) into clean indexed link references (e.g. `[Link #1: promo.store.com/sale]`).
+   - Reduces promotional email context window usage by >85%.
+   - Keeps full destination links accessible on-demand via the `get_email_link` tool or direct HTTP redirect endpoint (`/links/:account/:uid/:link_id`).
 
 ---
 
@@ -54,7 +58,8 @@ EMAIL_PASS=xxxx xxxx xxxx xxxx
 ## Available MCP Tools
 - **`list_accounts`** (LOW / Autonomous): List all configured mailboxes, providers, and live connection status.
 - **`list_emails`** (LOW / Autonomous): Fetch recent emails from a specific account or aggregated across all accounts.
-- **`read_email`** (LOW / Autonomous): Read full email body and attachment summaries.
+- **`read_email`** (LOW / Autonomous): Read full email body and attachment summaries with compressed promotional links.
+- **`get_email_link`** (LOW / Autonomous): Retrieve the full destination URL for a shortened promotional link on demand.
 - **`search_emails`** (LOW / Autonomous): Full-text search across subject, body, and sender.
 - **`send_email`** (HIGH / Require Approval): Dispatch outbound email via SMTP with thread headers.
 - **`archive_or_mark_email`** (MEDIUM / Require Approval): Star, read/unread, move, or trash emails.

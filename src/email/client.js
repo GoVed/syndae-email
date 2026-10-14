@@ -4,6 +4,7 @@ import nodemailer from 'nodemailer';
 import { simpleParser } from 'mailparser';
 import logger from '../utils/logger.js';
 import { config, PROVIDER_PRESETS } from '../config.js';
+import { shortenEmailLinks } from '../utils/urlShortener.js';
 
 if (dns.setDefaultResultOrder) {
   dns.setDefaultResultOrder('ipv4first');
@@ -41,6 +42,7 @@ export class EmailClient {
     this.statusListeners = [];
     this.onNewEmailCallback = null;
     this.lastSeenUid = 0;
+    this._linkCache = new Map();
     this._reconnecting = false;
     this._reconnectTimer = null;
     this._reconnectAttempts = 0;
@@ -291,7 +293,7 @@ export class EmailClient {
     }
   }
 
-  async readEmail({ uid, folder = 'INBOX', markAsRead = true } = {}) {
+  async readEmail({ uid, folder = 'INBOX', markAsRead = true, shortenLinks = true, includeFullLinks = false } = {}) {
     await this.ensureConnected();
 
     const lock = await this.imap.getMailboxLock(folder);
@@ -307,6 +309,24 @@ export class EmailClient {
         }
       }
 
+      const rawText = parsed.text || '';
+      let processedText = rawText;
+      let linksMap = {};
+      let linksCount = 0;
+      let linksSummary = [];
+
+      if (shortenLinks && rawText) {
+        const shortened = shortenEmailLinks(rawText, {
+          account: this.id,
+          uid,
+        });
+        processedText = shortened.text;
+        linksMap = shortened.links;
+        linksCount = shortened.count;
+        linksSummary = shortened.summary;
+        this._linkCache.set(`${this.id}:${uid}`, linksMap);
+      }
+
       return {
         uid,
         account: this.id,
@@ -316,8 +336,14 @@ export class EmailClient {
         to: (parsed.to?.value || []).map(t => ({ name: t.name, address: t.address })),
         cc: (parsed.cc?.value || []).map(t => ({ name: t.name, address: t.address })),
         date: parsed.date ? parsed.date.toISOString() : new Date().toISOString(),
-        text: parsed.text || '',
+        text: processedText,
         html: parsed.html || null,
+        links_count: linksCount,
+        links_summary: linksSummary,
+        links_note: linksCount > 0
+          ? `${linksCount} promotional/tracking links shortened. Use get_email_link with uid and link_id to retrieve the full original destination URL when required.`
+          : undefined,
+        ...(includeFullLinks ? { links: linksMap } : {}),
         attachments: (parsed.attachments || []).map(att => ({
           filename: att.filename,
           contentType: att.contentType,
@@ -329,6 +355,20 @@ export class EmailClient {
     } finally {
       lock.release();
     }
+  }
+
+  async getEmailLink({ uid, linkId = null } = {}) {
+    const cacheKey = `${this.id}:${uid}`;
+    let links = this._linkCache.get(cacheKey);
+    if (!links) {
+      const email = await this.readEmail({ uid, markAsRead: false, shortenLinks: true, includeFullLinks: true });
+      links = email.links || {};
+    }
+    if (linkId !== null && linkId !== undefined) {
+      const key = String(linkId);
+      return links[key] || null;
+    }
+    return links;
   }
 
   async searchEmails({ query, folder = 'INBOX', limit = 20 } = {}) {

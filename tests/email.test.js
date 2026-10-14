@@ -11,15 +11,21 @@ console.log('--- Running Syndae Multi-Account & Modern Auth Email Connector Test
 
 // Test 1: Tool definitions and safety policies
 console.log('Test 1: Verify MCP tool definitions, multi-account params, and safety policies...');
-assert.equal(TOOL_DEFINITIONS.length, 6, 'Must expose exactly 6 MCP tools');
+assert.equal(TOOL_DEFINITIONS.length, 7, 'Must expose exactly 7 MCP tools');
 
 const toolNames = TOOL_DEFINITIONS.map(t => t.name);
 assert(toolNames.includes('list_accounts'), 'Must include list_accounts');
 assert(toolNames.includes('list_emails'), 'Must include list_emails');
 assert(toolNames.includes('read_email'), 'Must include read_email');
+assert(toolNames.includes('get_email_link'), 'Must include get_email_link');
 assert(toolNames.includes('search_emails'), 'Must include search_emails');
 assert(toolNames.includes('send_email'), 'Must include send_email');
 assert(toolNames.includes('archive_or_mark_email'), 'Must include archive_or_mark_email');
+
+const getEmailLinkTool = TOOL_DEFINITIONS.find(t => t.name === 'get_email_link');
+assert.equal(getEmailLinkTool.risk_level, 'LOW', 'get_email_link must be LOW risk');
+assert.equal(getEmailLinkTool.policy, 'AUTONOMOUS', 'get_email_link must be AUTONOMOUS');
+assert(getEmailLinkTool.inputSchema.properties.uid, 'get_email_link must require uid');
 
 const listAccountsTool = TOOL_DEFINITIONS.find(t => t.name === 'list_accounts');
 assert.equal(listAccountsTool.risk_level, 'LOW', 'list_accounts must be LOW risk');
@@ -85,6 +91,10 @@ const mockWorkClient = {
     { uid: 201, subject: `Match for ${query} at work`, account: 'work' }
   ],
   readEmail: async ({ uid }) => ({ uid, subject: 'Q3 Product Roadmap', account: 'work' }),
+  getEmailLink: async ({ uid, linkId }) => {
+    const map = { '1': 'https://promo.deals.com/trk?token=abc' };
+    return linkId ? map[linkId] : map;
+  },
   sendEmail: async ({ to, subject }) => ({ success: true, messageId: '<sent-work-1@work.com>', account: 'work' }),
   disconnect: async () => {},
 };
@@ -103,6 +113,10 @@ const mockPersonalClient = {
     { uid: 101, subject: `Match for ${query} in personal`, account: 'personal' }
   ],
   readEmail: async ({ uid }) => ({ uid, subject: 'Dentist Appointment', account: 'personal' }),
+  getEmailLink: async ({ uid, linkId }) => {
+    const map = { '1': 'https://personal-promo.com/track?id=xyz' };
+    return linkId ? map[linkId] : map;
+  },
   sendEmail: async ({ to, subject }) => ({ success: true, messageId: '<sent-pers-1@gmail.com>', account: 'personal' }),
   disconnect: async () => {},
 };
@@ -125,6 +139,10 @@ assert.equal(allEmails[1].subject, 'Q3 Product Roadmap', 'Earlier email (16:00) 
 const workOnly = await manager.listEmails({ account: 'work' });
 assert.equal(workOnly.length, 1);
 assert.equal(workOnly[0].account, 'work');
+
+// Verify getEmailLink on manager
+const linkUrl = await manager.getEmailLink({ account: 'work', uid: 201, linkId: '1' });
+assert.equal(linkUrl, 'https://promo.deals.com/trk?token=abc');
 
 // Verify account-specific send
 const sendRes = await manager.sendEmail({ account: 'work', to: 'boss@work.com', subject: 'Report', body: 'Done' });
@@ -152,7 +170,7 @@ const listToolsResp = await server.handleJsonRpc({
   id: 2,
   method: 'tools/list',
 });
-assert.equal(listToolsResp.result.tools.length, 6);
+assert.equal(listToolsResp.result.tools.length, 7);
 
 // Test tools/call list_accounts
 const callListAccountsResp = await server.handleJsonRpc({
@@ -175,6 +193,16 @@ const callListResp = await server.handleJsonRpc({
 const listData = JSON.parse(callListResp.result.content[0].text);
 assert.equal(listData.length, 1);
 assert.equal(listData[0].subject, 'Dentist Appointment');
+
+// Test tools/call get_email_link
+const callGetLinkResp = await server.handleJsonRpc({
+  jsonrpc: '2.0',
+  id: 5,
+  method: 'tools/call',
+  params: { name: 'get_email_link', arguments: { account: 'work', uid: 201, link_id: '1' } }
+});
+const linkData = callGetLinkResp.result.content[0].text;
+assert.equal(linkData, 'https://promo.deals.com/trk?token=abc');
 console.log('✓ MCP Server JSON-RPC multi-account handlers verified.');
 
 // Test 6: Inbound Relay Trigger Dispatch with Account Tagging
@@ -221,10 +249,26 @@ assert.equal(dispatchedBody.payload.account, 'work');
 assert.equal(dispatchedBody.payload.subject, 'Urgent: Release Deployment');
 assert.equal(dispatchedBody.payload.has_attachments, true);
 assert.equal(dispatchedHeaders['X-Syndae-Access-Key'], 'test-key-123');
-console.log('✓ Inbound Relay multi-account event formatting verified.');
 
-// Test 7: HTTP Endpoints (/health, /status, /accounts, /auth/connect)
-console.log('Test 7: Verify Express HTTP endpoints (/health, /status, /accounts, /auth/connect)...');
+// Test link shortening in relay
+await relay.forwardEmailToSyndae({
+  uid: 105,
+  messageId: '<promo123@deals.com>',
+  from: { name: 'Super Deals', address: 'deals@store.com' },
+  subject: 'Huge Savings Event',
+  text: 'Don\'t miss out: https://promo.store.com/click/track?utm_source=fall_email&utm_campaign=mega&token=abcdef1234567890abcdef1234567890\nAlso check https://syndae.org',
+  date: '2026-09-30T17:00:00Z',
+}, 'work');
+
+assert.equal(dispatchedBody.payload.links_count, 1, 'Should detect and shorten 1 promotional link');
+assert(dispatchedBody.payload.text.includes('[Link #1: promo.store.com'), 'Link should be shortened in payload text');
+assert(dispatchedBody.payload.text.includes('https://syndae.org'), 'Short non-promotional link should be preserved');
+assert(!dispatchedBody.payload.text.includes('token=abcdef1234567890'), 'Bloated tokens must NOT be present in payload text');
+
+console.log('✓ Inbound Relay multi-account event formatting and link shortening verified.');
+
+// Test 7: HTTP Endpoints (/health, /status, /accounts, /links/:account/:uid/:link_id, /auth/connect)
+console.log('Test 7: Verify Express HTTP endpoints (/health, /status, /accounts, /links, /auth/connect)...');
 const { app } = createHttpApp({
   accountManager: manager,
   mcpServer: server,
@@ -249,6 +293,19 @@ assert(accountsRoute, 'Accounts route must exist');
 await accountsRoute.route.stack[0].handle({}, mockAccountsRes);
 assert.equal(accountsOutput.accounts.length, 2);
 
+// Verify /links/:account/:uid/:link_id redirect endpoint
+let redirectUrl = null;
+const mockLinkRes = {
+  redirect: (url) => { redirectUrl = url; },
+  status: () => ({ send: () => {} }),
+};
+const linksRoute = app._router.stack.find(s => s.route && s.route.path === '/links/:account/:uid/:link_id');
+assert(linksRoute, 'Links redirect route must exist');
+await linksRoute.route.stack[0].handle({
+  params: { account: 'work', uid: '201', link_id: '1' }
+}, mockLinkRes);
+assert.equal(redirectUrl, 'https://promo.deals.com/trk?token=abc', 'Links endpoint must 302 redirect to original destination');
+
 // Verify /auth/connect endpoint renders HTML config form when credentials not yet set
 let connectOutput = null;
 const mockConnectRes = {
@@ -266,4 +323,20 @@ assert(connectOutput.includes('Google Gmail'), 'Auth connect must render provide
 assert(connectOutput.includes('/auth/callback'), 'Auth connect must show authorized redirect URI');
 
 console.log('✓ Express HTTP endpoints and Modern Auth web flows verified.');
+
+// Test 8: Verify urlShortener link compression and deduplication
+console.log('Test 8: Verify urlShortener link compression, deduplication, and label formatting...');
+const { shortenEmailLinks, isPromotionalOrLong } = await import('../src/utils/urlShortener.js');
+
+assert.equal(isPromotionalOrLong('https://syndae.org/docs'), false);
+assert.equal(isPromotionalOrLong('https://promo.store.com/trk?utm_source=email&token=1234567890abcdef1234567890'), true);
+
+const testText = 'Promo: https://promo.store.com/trk?utm_source=email&token=1234567890abcdef1234567890\nDup: https://promo.store.com/trk?utm_source=email&token=1234567890abcdef1234567890\nDoc: https://syndae.org';
+const shortRes = shortenEmailLinks(testText, { account: 'testacc', uid: 99 });
+assert.equal(shortRes.count, 1, 'Duplicate URLs should reuse the same link index');
+assert(shortRes.text.includes('[Link #1: promo.store.com]'));
+assert(shortRes.text.includes('https://syndae.org'));
+assert.equal(shortRes.links['1'], 'https://promo.store.com/trk?utm_source=email&token=1234567890abcdef1234567890');
+console.log('✓ urlShortener compression and deduplication verified.');
+
 console.log('\n--- ALL MULTI-ACCOUNT & MODERN AUTH EMAIL TESTS PASSED ---');
